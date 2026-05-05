@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>GaborEye — Home (Sprint 2 mockup) — Round 3</title>
+<style>
+  /* Round 3 修正：
+     - 全テキスト・ボタン 24px 以上（OPT-1）
+     - color tokens を 7:1 準拠に（action.primary #13449D 8.97:1, streak.flame #7A3C00 8.49:1 等）
+     - Sprint 2 時点で Game 3 は「準備中」。disabled スタイル＋「準備中」チップ＋ aria-disabled 適用
+     - スマホ 360px で Game カード 3 列が破綻していたため、Sprint 2 では「Game1+Game2 は 2 列、Game3 は折返し 1 列で『準備中』」に変更
+       Sprint 3 で全 3 ゲームが有効化された時点で、3 列ではなく 1 列縦積み（カード幅最大化）に切替予定
+     - NF-12「色だけで情報を伝えない」適合：disabled 状態は opacity + 「準備中」チップ + aria-disabled の 3 経路で表現 */
+  :root {
+    --bg-canvas: #FAFAFA;
+    --bg-surface: #FFFFFF;
+    --fg-primary: #0E0F12;
+    --fg-secondary: #4A4F5A;
+    --fg-muted: #4D525C;
+    --action-primary: #13449D;
+    --action-primary-hover: #0F3580;
+    --on-primary: #FFFFFF;
+    --border-default: #E3E5EA;
+    --streak-flame-fg: #7A3C00;
+    --streak-flame-bg: #FFE9D6;
+    --accent: #0A6C53;
+    --focus-ring: #13449D;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-canvas: #000000;
+      --bg-surface: #15171C;
+      --fg-primary: #F5F6F8;
+      --fg-secondary: #B6BAC2;
+      --fg-muted: #9CA3AD;
+      --action-primary: #7FB0FF;
+      --action-primary-hover: #A6CBFF;
+      --on-primary: #000000;
+      --border-default: #2B2F39;
+      --streak-flame-fg: #FFB266;
+      --streak-flame-bg: #3E2D0A;
+      --accent: #4FD9B0;
+      --focus-ring: #7FB0FF;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    background: var(--bg-canvas);
+    color: var(--fg-primary);
+    /* Round 3: OPT-1 床を 24px に */
+    font-size: 24px;
+    line-height: 1.6;
+  }
+  .container { max-width: 720px; margin: 0 auto; padding: 16px; }
+  @media (min-width: 600px) { .container { padding: 48px; } }
+
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 0;
+  }
+  header h1 {
+    /* Round 3: font.h2 30px に */
+    margin: 0; font-size: 30px; font-weight: 700;
+  }
+  .icon-btn {
+    width: 48px; height: 48px;
+    background: transparent; border: none;
+    border-radius: 12px; cursor: pointer;
+    color: var(--fg-primary);
+    font-size: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:focus-visible {
+    outline: 3px solid var(--focus-ring); outline-offset: 2px;
+  }
+
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .streak {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--streak-flame-bg);
+  }
+  .streak .flame {
+    /* font.numeric.l サイズに統一、色は 7:1 準拠 #7A3C00（8.49:1 on white） */
+    font-size: 48px; color: var(--streak-flame-fg);
+  }
+  .streak .num {
+    font-size: 48px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--fg-primary);
+  }
+  /* font.body 24px */
+  .streak .label { font-size: 24px; color: var(--fg-secondary); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 100%;
+    /* Round 3: minHeight 64px (lg) */
+    min-height: 64px;
+    padding: 16px 24px;
+    /* Round 3: ボタン文字 font.body.lg = 26px */
+    font-size: 26px;
+    font-weight: 600;
+    border-radius: 16px;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 16px;
+    line-height: 1.3;
+  }
+  .btn-primary { background: var(--action-primary); color: var(--on-primary); }
+  .btn-primary:hover { background: var(--action-primary-hover); }
+  .btn-primary:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+  .btn-primary:active { transform: scale(0.98); }
+
+  .btn-tertiary {
+    background: transparent; color: var(--action-primary);
+    text-decoration: underline;
+    width: auto;
+    /* tertiary も最低 56px / 24px */
+    min-height: 56px;
+    font-size: 24px;
+  }
+  .btn-tertiary:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+
+  h2.section-title {
+    /* font.body 24px に統一 */
+    font-size: 24px; color: var(--fg-secondary);
+    font-weight: 400;
+    margin: 24px 0 16px;
+  }
+
+  /* Round 3: Sprint 2 時点では Game 3 は disabled。
+     スマホ 360px では Game1/Game2 を 2 列、Game3 は折返し 1 列（フル幅、disabled）
+     Sprint 3 で Game 3 が有効化されたら、全 3 カードを 1 列縦積みに切替予定（screens.md S3-04 参照） */
+  .game-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (min-width: 600px) { .game-grid { gap: 24px; grid-template-columns: 1fr 1fr 1fr; } }
+
+  .game-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    padding: 20px 16px;
+    text-align: center;
+    cursor: pointer;
+    /* Round 3: 24px ラベル + 説明文が収まる高さに */
+    min-height: 200px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: var(--fg-primary);
+    text-decoration: none;
+    position: relative;
+  }
+  .game-card:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+  .game-card:hover { border-color: var(--action-primary); }
+  .game-card .num {
+    /* font.h1 36px */
+    font-size: 36px; font-weight: 700; color: var(--action-primary);
+    line-height: 1;
+  }
+  .game-card .name {
+    /* font.body.lg 26px */
+    font-size: 26px; font-weight: 600; margin-top: 8px;
+  }
+  .game-card .desc {
+    /* font.body 24px（OPT-1 床、主要動線なので caption ではなく body） */
+    font-size: 24px; color: var(--fg-muted); margin-top: 6px;
+    line-height: 1.4;
+  }
+
+  /* Game 3 「準備中」状態（Sprint 2 限定） */
+  .game-card.coming-soon {
+    /* スマホ 360px：Game 3 は 2 列を超えて折返し 1 列フル幅で表示 */
+    grid-column: 1 / -1;
+    opacity: 0.65;
+    cursor: not-allowed;
+    background: var(--bg-canvas);
+  }
+  @media (min-width: 600px) {
+    .game-card.coming-soon { grid-column: auto; }
+  }
+  .game-card.coming-soon:hover { border-color: var(--border-default); }
+  .coming-soon-chip {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: var(--fg-secondary);
+    color: var(--bg-surface);
+    /* Tag は装飾扱いだが OPT-1 床確保のため 24px */
+    font-size: 24px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 999px;
+    line-height: 1.3;
+  }
+  /* スマホ 360px ではチップ位置を調整（折返し 1 列のため） */
+  @media (max-width: 599px) {
+    .coming-soon-chip { top: 16px; right: 16px; }
+  }
+
+  .nav-row {
+    display: flex; justify-content: space-around; padding: 24px 0;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .nav-row .btn-tertiary { font-size: 24px; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>GaborEye</h1>
+      <button class="icon-btn" aria-label="設定">⚙</button>
+    </header>
+
+    <div class="card streak" aria-label="現在 23 日連続">
+      <div class="flame" aria-hidden="true">🔥</div>
+      <div>
+        <div class="num">23</div>
+        <div class="label">日連続</div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" aria-label="3 分コースを始める。本日のトレーニングを開始します">
+      3 分コースを始める
+    </button>
+
+    <h2 class="section-title">または、ゲームだけ単体で：</h2>
+
+    <div class="game-grid">
+      <a href="#" class="game-card" aria-label="Game 1 変化察知">
+        <div class="num">1</div>
+        <div class="name">Game 1</div>
+        <div class="desc">変化察知</div>
+      </a>
+      <a href="#" class="game-card" aria-label="Game 2 二重表裏判別">
+        <div class="num">2</div>
+        <div class="name">Game 2</div>
+        <div class="desc">二重表裏判別</div>
+      </a>
+      <a href="#" class="game-card coming-soon"
+         aria-disabled="true"
+         tabindex="-1"
+         aria-label="Game 3 周辺視野ハント。Sprint 3 で実装予定、現在は準備中">
+        <span class="coming-soon-chip" aria-hidden="true">準備中</span>
+        <div class="num">3</div>
+        <div class="name">Game 3</div>
+        <div class="desc">周辺視野ハント</div>
+      </a>
+    </div>
+
+    <div class="nav-row">
+      <button class="btn btn-tertiary">📈 進捗グラフ</button>
+      <button class="btn btn-tertiary">🏅 バッジ一覧</button>
+    </div>
+  </div>
+</body>
+</html>

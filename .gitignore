@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Expo
+.expo/
+.expo-shared/
+dist/
+web-build/
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+ios/
+android/
+
+# Metro
+.metro-health-check*
+
+# Build artifacts
+build/
+*.tsbuildinfo
+*.apk
+*.aab
+
+# EAS
+.eas/
+
+# Playwright MCP work dir
+.playwright-mcp/
+
+# Working / debug artifacts at repo root（docs/ 配下の正式ファイルは対象外）
+/*.png
+/*.jpg
+/*.jpeg
+/single-play-list.md
+
+# Test
+coverage/
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Env
+.env
+.env.local
+.env.*.local

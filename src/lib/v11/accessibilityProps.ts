@@ -1,5 +1,5 @@
 /**
- * accessibilityProps.ts — 13 ゲーム共通コンポーネントの a11y プロパティ組立ヘルパー。
+ * accessibilityProps.ts — 全ゲーム共通コンポーネントの a11y プロパティ組立ヘルパー。
  *
  * react-native-web 0.19 系の `createDOMProps` は `accessibilityState.checked` を
  * `aria-checked` 属性に変換しない（変換対象は `accessibilityChecked` または

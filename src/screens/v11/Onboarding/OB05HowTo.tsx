@@ -1,7 +1,8 @@
 /**
  * S8-OB-05 ゲーム説明画面（onboarding.md §7）。
  *
- * 13 ゲームの全体像と操作仕様を 1 画面で簡潔に説明する。
+ * リリース対象ゲームの全体像と操作仕様を 1 画面で簡潔に説明する。
+ * 「N 種類」は releaseEnabled=true なゲーム数を動的に表示（v1.1.4）。
  */
 import React from 'react';
 import {
@@ -19,15 +20,18 @@ import {
 } from '../../../theme/tokens';
 import { Button } from '../../../components/Button';
 import { StepIndicator } from '../../../components/StepIndicator';
+import { getReleaseEnabledGameCount } from '../../../lib/v11/releaseFilter';
 
 export type OB05HowToProps = {
   onNext: () => void;
 };
 
+const ENABLED_GAME_COUNT = getReleaseEnabledGameCount();
+
 const BLOCKS: ReadonlyArray<{ icon: string; title: string; body: string }> = [
   {
     icon: '📊',
-    title: '13 種類のゲームがあります',
+    title: `${ENABLED_GAME_COUNT} 種類のゲームがあります`,
     body: 'ガボールパッチ（縞模様）を使った視覚弁別トレーニングです',
   },
   {

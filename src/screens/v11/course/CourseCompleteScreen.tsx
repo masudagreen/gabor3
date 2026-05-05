@@ -35,7 +35,7 @@ export type CourseCompleteScreenProps = {
   todayWideScore: number | null;
   /** 前回比（前回 wideScore との diff、null は初回） */
   diffFromPrevious: number | null;
-  /** 含まれたゲーム数（"13 ゲーム平均" 表示用） */
+  /** 含まれたゲーム数（"N ゲーム平均" 表示用） */
   gameCount: number;
   /** 現在のストリーク日数 */
   currentStreak: number;

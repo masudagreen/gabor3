@@ -1,7 +1,7 @@
 /**
  * useGameCountdown — 60 秒固定カウントダウン用の共通フック（v1.1 OPT-12）。
  *
- * 13 ゲーム（G-01〜G-13）の Screen で同じパターンだった setInterval ベースの
+ * 全ゲーム（G-01〜G-13）の Screen で同じパターンだった setInterval ベースの
  * カウントダウンをここに集約する。本フックは pause 制御もサポートする：
  *
  * 仕様：

@@ -1344,9 +1344,7 @@ const PlaceholderScreen: React.FC<{
             lineHeight: fontSize.bodyLg * 1.6,
           }}
         >
-          この機能は {sprint} で実装予定です。{'\n'}
-          Sprint 17 完了時点（13 ゲーム全実装完了）のため{'\n'}
-          残るは全ゲーム連続コース・進捗・バッジです。
+          この機能は {sprint} で実装予定です。
         </Text>
         <Button
           variant="primary"

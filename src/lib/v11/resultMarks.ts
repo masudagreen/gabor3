@@ -1,8 +1,8 @@
 /**
  * resultMarks — Sprint 20（v1.1.1）の `ResultOverlay` に渡す `ResultMark[]` を
- * 13 ゲームそれぞれの GradingResult から構築するヘルパー集。
+ * 各ゲームの GradingResult から構築するヘルパー集。
  *
- * components.md §25「13 ゲームの ResultOverlay marks 生成ロジック」の規範に
+ * components.md §25「全ゲームの ResultOverlay marks 生成ロジック」の規範に
  * 従って実装する。各ヘルパーは純関数で、`ResultMark[]` を返す。
  *
  *   - 単数選択ゲーム（G-02 / G-03 / G-04 / G-05 / G-06 / G-08 / G-09 / G-10 /

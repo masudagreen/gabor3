@@ -8,7 +8,7 @@
  *   - B-02 三日坊主突破：3 日連続フルコース完了
  *   - B-03 一週間の習慣：7 日連続フルコース完了
  *   - B-04 一ヶ月の継続：30 日連続フルコース完了
- *   - B-05 100 試行：累計 100 試行達成（13 ゲーム合算）
+ *   - B-05 100 試行：累計 100 試行達成（全ゲーム合算）
  *   - B-06 視野ハンター：G-03 でワイドスコア 80 以上
  *   - B-07 弁別の達人：G-02 でワイドスコア 80 以上
  *   - B-08 全方位改善：enabled 全ゲームで前週比スコア上昇
@@ -85,7 +85,7 @@ export type FullCourseCompletionV11 = {
  * バッジ判定コンテキスト。
  *
  * - streak：current/longest streak（フルコース連続日数）
- * - totalTrialCount：全 13 ゲーム合算の試行数
+ * - totalTrialCount：全ゲーム合算の試行数
  * - allDailyStats：全 DailyStats（ベスト閾値・wideScore 等）
  * - perGamePlayCount：各ゲームの累計プレイ回数（B-09 探検家用）
  * - perGameBestUpdated：各ゲームで「ベスト閾値が更新された」回数（B-10 全制覇用、>= 1 回が条件）

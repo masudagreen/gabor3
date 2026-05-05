@@ -1,7 +1,7 @@
 /**
  * GamePlaySurface — GS-1（components.md §1、system.md §1.1）。
  *
- * 13 ゲーム共通の OPT-12 骨格を強制するレイアウトコンテナ：
+ * 全ゲーム共通の OPT-12 骨格を強制するレイアウトコンテナ：
  *
  *   ┌─ GameStatusBarV11 (64px) ─┐
  *   │ ✕   残り N 秒              │

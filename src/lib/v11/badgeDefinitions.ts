@@ -101,7 +101,7 @@ export const BADGE_DEFINITIONS_V11: Record<BadgeIdV11, BadgeDefinitionV11> = {
   'B-05': {
     badgeId: 'B-05',
     name: '100 試行',
-    conditionText: '累計 100 試行達成（13 ゲーム合算）',
+    conditionText: '累計 100 試行達成（全ゲーム合算）',
     emoji: '💯',
   },
   'B-06': {

@@ -3,7 +3,7 @@
  *
  * F-14 受け入れ基準：
  *   - staircase をリセットは確認ダイアログ後に実行
- *   - 文言：「全 13 ゲームの難易度を初期値に戻します。これまでの進捗記録は残りますが、難易度のみリセットされます。」
+ *   - 文言：「全ゲームの難易度を初期値に戻します。これまでの進捗記録は残りますが、難易度のみリセットされます。」
  *   - キャンセル / リセット（destructive）の 2 ボタン
  *
  * a11y：role="dialog", aria-modal="true"
@@ -75,7 +75,7 @@ export const StaircaseResetConfirmDialog: React.FC<
             staircase をリセット
           </Text>
           <Text style={[styles.message, { color: colors.fgPrimary }]}>
-            全 13 ゲームの難易度を初期値に戻します。これまでの進捗記録は残りますが、難易度のみリセットされます。
+            全ゲームの難易度を初期値に戻します。これまでの進捗記録は残りますが、難易度のみリセットされます。
           </Text>
           <View style={styles.actions}>
             <Button

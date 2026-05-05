@@ -26,6 +26,7 @@ import {
   spacing,
 } from '../../theme/tokens';
 import { Button } from '../Button';
+import { getReleaseEnabledGameCount } from '../../lib/v11/releaseFilter';
 
 export type DataResetNoticeProps = {
   onAcknowledge: () => void;
@@ -36,6 +37,7 @@ export const DataResetNotice: React.FC<DataResetNoticeProps> = ({
 }) => {
   const scheme = useColorScheme() ?? 'light';
   const colors = getColors(scheme);
+  const enabledCount = getReleaseEnabledGameCount();
 
   return (
     <View
@@ -67,7 +69,7 @@ export const DataResetNotice: React.FC<DataResetNoticeProps> = ({
           accessibilityRole="text"
         >
           より良いトレーニングのため、過去のデータをリセットしました。
-          新しい 13 ゲームをお楽しみください。
+          新しい {enabledCount} ゲームをお楽しみください。
         </Text>
 
         <Text

@@ -49,7 +49,7 @@ describe('StaircaseResetConfirmDialog', () => {
     expect(onCancel).toHaveBeenCalled();
   });
 
-  it('文言に「全 13 ゲームの難易度を初期値に戻します」を含む', () => {
+  it('文言に「全ゲームの難易度を初期値に戻します」を含む（v1.1.4：13 ゲーム明記をやめゲーム数中立表現に）', () => {
     const { getByText } = render(
       <StaircaseResetConfirmDialog
         visible
@@ -57,6 +57,6 @@ describe('StaircaseResetConfirmDialog', () => {
         onCancel={jest.fn()}
       />,
     );
-    expect(getByText(/全 13 ゲームの難易度を初期値に戻します/)).toBeTruthy();
+    expect(getByText(/全ゲームの難易度を初期値に戻します/)).toBeTruthy();
   });
 });

@@ -24,6 +24,7 @@ import {
   spacing,
 } from '../../../theme/tokens';
 import { Button } from '../../../components/Button';
+import { getReleaseEnabledGameCount } from '../../../lib/v11/releaseFilter';
 
 export type OB06ExperienceProps = {
   onComplete: () => void;
@@ -34,6 +35,7 @@ export const OB06Experience: React.FC<OB06ExperienceProps> = ({
 }) => {
   const scheme = useColorScheme() ?? 'light';
   const colors = getColors(scheme);
+  const enabledCount = getReleaseEnabledGameCount();
 
   return (
     <View
@@ -50,7 +52,7 @@ export const OB06Experience: React.FC<OB06ExperienceProps> = ({
             },
           ]}
           accessibilityRole="text"
-          accessibilityLabel="オンボーディング完了。お疲れさまでした。明日からはホームの全ゲーム連続プレイから 13 ゲームをご利用ください"
+          accessibilityLabel={`オンボーディング完了。お疲れさまでした。明日からはホームの全ゲーム連続プレイから ${enabledCount} ゲームをご利用ください`}
         >
           <Text
             style={[styles.bannerTitle, { color: colors.fgPrimary }]}
@@ -61,7 +63,7 @@ export const OB06Experience: React.FC<OB06ExperienceProps> = ({
           <Text style={[styles.bannerBody, { color: colors.fgPrimary }]}>
             お疲れさまでした。{'\n'}
             明日からはホームの「全ゲーム連続プレイ」から{'\n'}
-            13 ゲームをご利用ください。
+            {enabledCount} ゲームをご利用ください。
           </Text>
         </View>
 

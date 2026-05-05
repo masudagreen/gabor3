@@ -1,7 +1,7 @@
 /**
  * CourseRunnerScreen — S18-02 コースフロー全体オーケストレータ。
  *
- * 全 13 ゲーム連続コースの状態機械（distance-reminder → game N → interstitial N
+ * 全ゲーム連続コースの状態機械（distance-reminder → game N → interstitial N
  * → ... → cooldown → complete）を駆動する。
  *
  * - 内部状態は `CourseSessionState`（lib/v11/courseSession.ts）。

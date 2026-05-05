@@ -1,5 +1,5 @@
 /**
- * Sprint 20-B-3：13 ゲーム共通の PlayScreen / ResultScreen 連携型。
+ * Sprint 20-B-3：全ゲーム共通の PlayScreen / ResultScreen 連携型。
  *
  * `phase === 'result'` 時に親が PlayScreen に返す補助情報を表す。
  * `previousBest` は単体プレイ時の「初回測定」表示等に使う（components.md §23）、

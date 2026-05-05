@@ -1,15 +1,14 @@
 /**
  * gameRegistry — F-08（spec-v11.md §F-08 / §9.1）。
  *
- * 13 ゲームを中央定義する単一ソース。各ゲームの ID / 表示名 / 系統 / 説明 /
- * staircase パラメータ範囲 / `releaseEnabled` / `order` を保持する。
+ * 全 13 ゲーム（G-01〜G-13）を中央定義する単一ソース。各ゲームの
+ * ID / 表示名 / 系統 / 説明 / staircase パラメータ範囲 / `releaseEnabled` / `order` を保持する。
  *
  * F-18（リリース選定運用フラグ）に従い、`releaseEnabled=false` のゲームは
- * `getEnabledGames()` 経由で動的除外される。Sprint 8 では全 13 ゲームを
- * `releaseEnabled=true` で登録（spec-v11.md §F-08 受け入れ基準）。
+ * `getEnabledGames()` 経由で動的除外される。
  *
- * Sprint 8 では各ゲームの本実装は無く、レジストリ定義のみ。各ゲームは
- * Sprint 9〜17 で順次実装される。
+ * v1.1.4 取捨選択リリース：G-09/G-10/G-11/G-12 は `releaseEnabled=false` で
+ * 公開対象から外す（実装は残置）。残り 9 ゲーム（G-01〜G-08, G-13）が公開対象。
  */
 
 import { GameIdV11, ALL_GAME_IDS_V11 } from './gameIds-v11';
@@ -45,10 +44,10 @@ export type GameDefinition = {
 };
 
 /**
- * 13 ゲーム全件の定義。spec-v11.md §7.1〜§7.13 に従う。
+ * 全 13 ゲームの定義。spec-v11.md §7.1〜§7.13 に従う。
  *
- * Sprint 8 時点では全ゲームを `releaseEnabled=true` で登録。Sprint 17 完了後、
- * リリース選定運用（§15）でフラグを切り替える。
+ * v1.1.4：G-09/10/11/12 は `releaseEnabled=false`（公開対象外）。それ以外は
+ * `true` で公開対象。リリース対象の動的取得は `getEnabledGames()` を経由する。
  */
 export const GAME_REGISTRY: ReadonlyArray<GameDefinition> = [
   {
@@ -180,7 +179,7 @@ export const GAME_REGISTRY: ReadonlyArray<GameDefinition> = [
 ];
 
 /**
- * 13 ゲーム全件を返す（順序保証なし、テスト等の網羅検証用）。
+ * 全 13 ゲームを返す（順序保証なし、テスト等の網羅検証用）。disabled も含む。
  */
 export function getAllGames(): ReadonlyArray<GameDefinition> {
   return GAME_REGISTRY;

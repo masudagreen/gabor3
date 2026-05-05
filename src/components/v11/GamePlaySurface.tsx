@@ -3,7 +3,8 @@
  *
  * 全ゲーム共通の OPT-12 骨格を強制するレイアウトコンテナ：
  *
- *   ┌─ GameStatusBarV11 (64px) ─┐
+ *   ┌─ (SafeArea top inset) ─────┐
+ *   ├─ GameStatusBarV11 (64px) ─┤
  *   │ ✕   残り N 秒              │
  *   ├─────────────────────────────┤
  *   │  [ 注視領域（stimulusArea）]  │
@@ -12,6 +13,12 @@
  *   ├─────────────────────────────┤
  *   │  [ 選択肢（answerChoices） ] │
  *   └─────────────────────────────┘
+ *
+ * v1.1.5：実機で OS のステータスバー（時計・電池表示）と画面が被る不具合を解消。
+ *   - root に SafeArea top inset を paddingTop として適用。
+ *   - `expandedStimulus` prop（既定 false）で刺激領域の上下マージンを切替：
+ *       false → 通常の上部マージン（広すぎないように）
+ *       true  → マージン無し（眼筋トレ系・視点追従系で画面いっぱいに使う）
  *
  * 上部 64px / 注視領域パディング 16px / 選択肢領域パディング上 24px / 下 32px
  * （system.md §1.1）。
@@ -25,6 +32,7 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   fontSize,
   getColors,
@@ -60,6 +68,12 @@ export type GamePlaySurfaceProps = {
    * 既定 false（後方互換）。
    */
   guidanceLiveRegion?: boolean;
+  /**
+   * v1.1.5：刺激領域を「画面いっぱいに広げる」モード。
+   * - false（既定）：刺激領域の上に追加マージン（広すぎを抑制）
+   * - true：マージン無し。眼筋トレ系（広範囲を見渡す）や視点追従系（動きを追う）で使用
+   */
+  expandedStimulus?: boolean;
   testId?: string;
 };
 
@@ -73,10 +87,12 @@ export const GamePlaySurface: React.FC<GamePlaySurfaceProps> = ({
   guidanceText,
   stimulusInteractive = false,
   guidanceLiveRegion = false,
+  expandedStimulus = false,
   testId,
 }) => {
   const scheme = useColorScheme() ?? 'light';
   const colors = getColors(scheme);
+  const insets = useSafeAreaInsets();
 
   const stimulusA11yProps = stimulusInteractive
     ? {}
@@ -88,7 +104,10 @@ export const GamePlaySurface: React.FC<GamePlaySurfaceProps> = ({
   return (
     <View
       accessibilityLabel={`${gameNameJa} プレイ画面`}
-      style={[styles.container, { backgroundColor: colors.bgCanvas }]}
+      style={[
+        styles.container,
+        { backgroundColor: colors.bgCanvas, paddingTop: insets.top },
+      ]}
       testID={testId ?? 'game-play-surface'}
     >
       <GameStatusBarV11
@@ -100,7 +119,10 @@ export const GamePlaySurface: React.FC<GamePlaySurfaceProps> = ({
         accessibilityRole="none"
       >
         <View
-          style={styles.stimulusFrame}
+          style={[
+            styles.stimulusFrame,
+            !expandedStimulus && styles.stimulusFrameCompact,
+          ]}
           {...stimulusA11yProps}
           testID="game-play-surface-stimulus"
         >
@@ -157,6 +179,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+  },
+  // v1.1.5：「広い描画」を必要としないゲームでは、刺激領域の上に追加マージンを入れて
+  // ステータスバーから離す（実機で広すぎ問題への対処）。
+  // 既定 paddingVertical: 16px に加え、上だけ +32px = 計 48px の上余白。
+  stimulusFrameCompact: {
+    paddingTop: spacing.s6,
   },
   guidance: {
     fontSize: fontSize.body,

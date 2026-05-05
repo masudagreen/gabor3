@@ -302,6 +302,7 @@ export const G03PeripheralHuntScreen: React.FC<G03PeripheralHuntScreenProps> = (
         ariaInstruction="中央の十字を見ながら、円周上に並んだ 8 個の縞模様の中から違う向きのパッチを直接タップしてください。気が変われば何度でも変更可。確定ボタンはありません。60 秒経過で自動採点します。"
         guidanceText="中央の + を見ながら、違う向きのパッチを選んでください"
         stimulusInteractive
+        expandedStimulus
         stimulusArea={
           <RadialEightStimulus
             patches={trial.patches}

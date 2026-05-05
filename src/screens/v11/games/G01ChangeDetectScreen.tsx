@@ -336,6 +336,7 @@ export const G01ChangeDetectScreen: React.FC<G01ChangeDetectScreenProps> = ({
         onAbort={requestAbort}
         ariaInstruction="3 行 3 列から 5 行 5 列のグリッドの中で、わずかに角度が変化していくパッチを見つけます。動いていると思うパッチをタップしてください。複数選択可、再タップで解除。60 秒経過で自動採点します。"
         guidanceText="動いていると思うパッチをタップしてください"
+        expandedStimulus
         stimulusArea={
           <MorphGridStimulus
             rows={trial.config.rows}

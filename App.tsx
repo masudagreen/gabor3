@@ -7,8 +7,13 @@
  */
 
 import React from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppRouterV11 } from './src/navigation/v11/AppRouterV11';
 
 export default function App() {
-  return <AppRouterV11 />;
+  return (
+    <SafeAreaProvider>
+      <AppRouterV11 />
+    </SafeAreaProvider>
+  );
 }

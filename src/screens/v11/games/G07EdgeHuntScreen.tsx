@@ -301,6 +301,7 @@ export const G07EdgeHuntScreen: React.FC<G07EdgeHuntScreenProps> = ({
         onAbort={requestAbort}
         ariaInstruction="4×4 のガボールパッチ盤面の中に、縞の向きがそろって一列に並ぶ 3 個のパッチがあります。他のパッチは縞の向きがバラバラ。縞の向きが同じで「線」のように並んでいる 3 個全部をタップで選んでください。複数選択可、再タップで解除。確定ボタンはありません。60 秒経過で自動採点します。"
         guidanceText="縞の向きがそろって並んでいる 3 個を選んでください"
+        expandedStimulus
         stimulusArea={
           <GaborGridStimulus
             patches={trial.patches}

@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>S22-G01-PLAY — G-01 ゆっくり回転検出 (3×3 + 回転)</title>
+<style>
+  :root {
+    --bg-canvas: #0F1115;
+    --bg-surface: #1A1D24;
+    --gabor-bg: #808080;
+    --fg-primary: #FFFFFF;
+    --fg-muted: #B7BCC9;
+    --countdown-normal: #FFFFFF;
+    --selection-subtle: rgba(220, 224, 232, 0.55);
+    --selection-idle: rgba(220, 224, 232, 0.30);
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-canvas);
+    color: var(--fg-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    box-sizing: border-box;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  .device {
+    max-width: 375px; width: 100%; min-height: 667px;
+    margin: 24px auto;
+    background: var(--gabor-bg);
+    border-radius: 32px; overflow: hidden;
+    border: 1px solid #2A2D34;
+    position: relative;
+    display: flex; flex-direction: column;
+  }
+  .statusbar {
+    height: 88px;
+    background: rgba(26, 29, 36, 0.85);
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 16px 16px 12px 16px;
+    backdrop-filter: blur(8px);
+  }
+  .close { width: 48px; height: 48px; background: transparent; border: none; color: var(--fg-primary); font-size: 28px; }
+  .countdown {
+    font-size: 30px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--countdown-normal);
+    line-height: 1; letter-spacing: -0.02em;
+  }
+  .placeholder { width: 48px; }
+  .guide {
+    text-align: center;
+    color: var(--fg-primary);
+    background: rgba(26, 29, 36, 0.7);
+    padding: 12px 16px;
+    font-size: 22px;
+    font-weight: 500;
+  }
+  .grid-frame {
+    margin: 24px auto;
+    width: min(320px, calc(100% - 32px));
+    aspect-ratio: 1 / 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .cell {
+    background: var(--gabor-bg);
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 1px var(--selection-idle);
+    overflow: hidden;            /* 矩形クリッピング (NF-27/28) */
+    position: relative;
+    cursor: pointer;
+  }
+  .cell.selected {
+    box-shadow: inset 0 0 0 2px var(--selection-subtle);
+  }
+  .cell:focus-visible {
+    outline: 3px solid #FFFFFF;
+    outline-offset: 2px;
+  }
+  .cell svg {
+    display: block; width: 100%; height: 100%;
+    overflow: hidden;            /* 矩形クリップ補強 */
+  }
+  /* rotation animation */
+  @keyframes spin-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes spin-ccw { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+  .gabor-static  { transform-origin: 50% 50%; }
+  .gabor-rot-cw  { animation: spin-cw 120s linear infinite; transform-origin: 50% 50%; }
+  .gabor-rot-ccw { animation: spin-ccw 120s linear infinite; transform-origin: 50% 50%; }
+  .label-pc {
+    text-align: center; color: var(--fg-muted); font-size: 14px; margin: 16px 24px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+</style>
+</head>
+<body>
+
+<div class="label-pc">S22-G01-PLAY — G-01 ゆっくり回転検出（3×3 固定、回転 1〜3 個ランダム、両方向、矩形クリッピング N=1.5）</div>
+<div class="device" role="region" aria-label="G-01 ゆっくり回転検出 プレイ画面">
+  <div class="statusbar">
+    <button class="close" aria-label="ゲームを中断">×</button>
+    <div class="countdown" role="timer" aria-live="polite">47</div>
+    <div class="placeholder"></div>
+  </div>
+  <div class="guide" id="g01-guide">回転しているパッチをタップ</div>
+
+  <!--
+    ガボール SVG 規範（system.md §1.12）:
+      - viewBox="0 0 100 100" を表示枠とし、
+        内部の <rect> を x=-25 y=-25 width=150 height=150 (= 1.5 倍) で描く
+      - 回転は <g transform="rotate(deg 50 50)">
+      - cell は overflow:hidden で矩形クリッピング
+      → 角度を変えても四隅まで縞模様が見える
+  -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <pattern id="gabor-stripes" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#5a5a5a"/>
+        <rect width="7" height="14" fill="#a8a8a8"/>
+      </pattern>
+      <radialGradient id="gabor-window" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#808080" stop-opacity="0"/>
+        <stop offset="70%"  stop-color="#808080" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#808080" stop-opacity="0.50"/>
+      </radialGradient>
+    </defs>
+  </svg>
+
+  <div class="grid-frame" role="group" aria-describedby="g01-guide" aria-label="3×3 ガボールパッチ">
+    <!-- row 0 -->
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 1 行目 1 列目のガボール"
+         data-target-id="g01-cell-0-0">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g class="gabor-static" transform="rotate(15 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-stripes)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-window)"/>
+        </g>
+      </svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 1 行目 2 列目のガボール（回転中・正解候補）"
+         data-target-id="g01-cell-0-1">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g class="gabor-rot-cw" transform="rotate(45 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-stripes)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-window)"/>
+        </g>
+      </svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 1 行目 3 列目のガボール"
+         data-target-id="g01-cell-0-2">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g class="gabor-static" transform="rotate(70 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-stripes)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-window)"/>
+        </g>
+      </svg>
+    </div>
+    <!-- row 1 -->
+    <div class="cell selected" role="checkbox" aria-checked="true" tabindex="0"
+         aria-label="グリッド 2 行目 1 列目のガボール（選択中）"
+         data-target-id="g01-cell-1-0">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g class="gabor-rot-ccw" transform="rotate(120 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-stripes)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-window)"/>
+        </g>
+      </svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 2 行目 2 列目のガボール"
+         data-target-id="g01-cell-1-1">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g class="gabor-static" transform="rotate(95 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-stripes)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-window)"/>
+        </g>
+      </svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 2 行目 3 列目のガボール"
+         data-target-id="g01-cell-1-2">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g class="gabor-static" transform="rotate(160 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-stripes)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-window)"/>
+        </g>
+      </svg>
+    </div>
+    <!-- row 2 -->
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 3 行目 1 列目のガボール"
+         data-target-id="g01-cell-2-0">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g class="gabor-static" transform="rotate(30 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-stripes)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-window)"/>
+        </g>
+      </svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 3 行目 2 列目のガボール（回転中・正解候補）"
+         data-target-id="g01-cell-2-1">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g class="gabor-rot-cw" transform="rotate(85 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-stripes)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-window)"/>
+        </g>
+      </svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 3 行目 3 列目のガボール"
+         data-target-id="g01-cell-2-2">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g class="gabor-static" transform="rotate(140 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-stripes)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#gabor-window)"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

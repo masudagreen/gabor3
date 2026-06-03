@@ -1,48 +1,41 @@
-# GaborEye V1 — デザインシステム
+# GaborEye v2.0 — デザインシステム
 
-このドキュメントは GaborEye V1 のデザインシステム全体を定義します。全画面・全コンポーネントが本システムの規範に従います。本書は仕様書 `docs/spec.md` の §1（老眼最適化原則）を**実装上の規範**として組み込み、トークン値・コンポーネント API 仕様を導出します。
+> **位置づけ**：本書は v2.0（大規模リブート）のデザインシステムの **新しいソース・オブ・トゥルース** です。仕様書 `docs/spec.md`（v2.0）に 1 対 1 で対応します。
+> v1.2 のデザイン（`docs/design-v11/`）は参考にしてよいが踏襲義務はありません。v2.0 は **下タブ 3 構成（ホーム / 履歴 / 設定）+ 単一の変化検出ゲーム** へ全面再設計です。
+> 本書は自己完結しています（旧 system.md を読まなくても本書だけで実装トークンが揃う）。トークン値の一部は v1 / v1.2 で 7:1 検証済みのものを継承しています。
 
 ---
 
-## 0. デザイン原則（OPT-1〜10 の組み込み）
+## 0. デザイン原則（老眼配慮 OPT-1〜12 の組み込み）
 
-| ID | 原則 | デザインシステム上の実装 |
+v2.0 は老眼層（40 代以上）を主対象とする。下表の原則は全画面・全コンポーネントが構造的に満たす（トークン経由のみ値設定可能とし、違反が起こり得ない構造にする）。
+
+| ID | 原則 | v2.0 デザイン上の実装 |
 |---|---|---|
-| **OPT-1** | 大きい文字 | `font.body.min` = **18pt（24px）**、`font.heading.min` = **22pt（29px）**、`font.button` = **18pt（24px）固定** |
-| **OPT-2** | 大きいタップ領域 | `tappable.min` = 48pt、`tappable.recommended` = 56pt。Button・ListItem・IconButton の `minHeight` トークンに直結 |
-| **OPT-3** | 短い操作シーケンス | レイアウトは「主要 CTA 1 個＋補助 1〜2 個」を基本構成。3 個以上のアクションを 1 画面に並べない |
-| **OPT-4** | 読書距離プリセット | `DistanceCalibrator` コンポーネントで 30/40/50cm の 3 ノッチ式を強制 |
-| **OPT-5** | 高コントラスト UI | UI テキスト・ボタンは前景／背景コントラスト比 **7:1 以上**（実測ベースで保証）。ガボール刺激領域は別ロジック（中性グレー基準） |
-| **OPT-6** | 優しい言い回し | コピーライティング規範を §11 に明示 |
-| **OPT-7** | 急かさない | ボタンの自動消失・自動進行はクールダウン／結果サマリ間の自動進行（10 秒以内）以外で禁止。タイムアウト・カウントダウン表示は **22pt（≒30px）以上**（`font.h2` 30px に相当） |
-| **OPT-8** | ダークモード必須 | カラートークンを `light` / `dark` の 2 系統で完全並走定義 |
-| **OPT-9** | 片眼トレーニング配慮 | アイコンを大型化、点滅アニメ禁止 |
-| **OPT-10** | 開始前距離リマインド | `DistanceReminder` 画面コンポーネントを §components.md で定義し、各セッション／ゲーム開始前に必ず挟む |
-
-> **遵守監査ポイント**：本システムを参照する全画面・全コンポーネントは、上記 10 原則の違反が設計上発生し得ない構造（=トークン経由のみ値設定可能）にする。
+| **OPT-1** | 大きい文字 | 本文最小 `18pt`（= 24px）。`font.body.min = 24px`、ボタン文字も 24px 以上。グラフ軸ラベル 18pt 以上 |
+| **OPT-2** | 大きいタップ領域 | `tappable.min = 48pt`、`tappable.recommended = 56pt`。CTA・設定行・ダイアログボタンは 56pt 以上 |
+| **OPT-3** | 短い操作シーケンス | 1 画面の主要 CTA は 1 個。オンボーディングは 6 タップ以下（F-06） |
+| **OPT-4** | 読書距離プリセット | 視聴距離 30/40/50cm の 3 択（設定／オンボ） |
+| **OPT-5** | 高コントラスト UI | UI テキスト・ボタンの前景/背景コントラスト比 **7:1 以上**（実測ベース、NF-8）。ガボール刺激領域は中性グレー基準で別ロジック |
+| **OPT-6** | 優しい言い回し | コピーライティング規範（§13） |
+| **OPT-7** | 急かさない | ボタン自動消失なし。自動進行は距離リマインドのカウントダウンと採点後の短インターバルのみ |
+| **OPT-8** | ダークモード必須 | 全カラートークンを light / dark 2 系統で並走定義（OS 連動/明/暗の 3 択、F-13） |
+| **OPT-9** | 片眼トレーニング配慮 | 片眼ガイダンス（off/左/右/交互）。点滅アニメ全面禁止（NF-11） |
+| **OPT-10** | 開始前距離リマインド | 距離リマインド画面を起動フローに必ず挟む（F-06）。カウントダウン自動進行 |
+| **OPT-11（v2 改訂）** | 急かさないが好みで早期締切可 | 旧「60 秒固定・早期終了不可」を廃止。**m 秒可変 + 3 採点方式（F-02）** に置換。方式②の確定・方式③の全問正解で早期締切可 |
+| **OPT-12（v2 改訂）** | 共通注視フォーマット | 新ゲーム 1 種に合わせ改訂。共通項は「m 秒のラウンド・パッチ直接タップ選択・試行中は正誤フィードバックなし・採点後 ✅/❌ 開示」 |
 
 ---
 
 ## 1. カラートークン
 
 ### 1.1 基本方針
-
-- ダーク／ライト両モード対応。**全 UI テキスト／ボタンのコントラスト比 7:1 以上**を実測ベースで厳守（OPT-5 / NF-8）。
+- light / dark 両モード完全並走。全 UI テキスト/ボタンのコントラスト比 **7:1 以上**を実測ベースで厳守（OPT-5 / NF-8）。
 - セマンティックトークン（用途名）→ プリミティブトークン（具体値）の 2 層構造。
-- ガボール刺激領域は UI とは別の「中性グレースケールパレット」を使う。
-- **本セクションの数値は WebAIM Contrast Checker と同等の WCAG 2.1 算式（相対輝度＋ 0.05 オフセット）で算出した実測値である**。記載値と実装値が一致しない場合は実装側を是正する。
+- ガボール刺激領域は UI とは別の「中性グレースケールパレット」（背景 #808080 固定）。
+- 値は WCAG 2.1 相対輝度比 `(L1 + 0.05) / (L2 + 0.05)`（WebAIM 一致）で算出した実測値。記載値と実装値が食い違う場合は実装側を是正する。Generator は `tests/contrast.spec.ts` で全組み合わせを自動検査することを推奨。
 
 ### 1.2 プリミティブトークン
-
-> **Round 3 修正履歴**：以下のトークンは 7:1 厳守のため値を変更しました（before → after）。
-> - `palette.brand.primary` light: `#1D5BD8` (5.93:1) → **`#13449D`** (8.97:1)
-> - `palette.brand.primaryHover` light: `#1745A6` (8.61:1) → **`#0F3580`** (11.41:1)
-> - `palette.brand.accent` light: `#0F8F6E` (4.06:1) → **`#0A6C53`**（surface 上では装飾扱い、テキスト用途では使用禁止）
-> - `palette.semantic.error` light: `#B6271F` (6.37:1) → **`#A11C16`** (7.80:1)
-> - `palette.semantic.info` light: `#0E5AA6` (7.05:1) → 据え置き
-> - `palette.streak.flame` light: `#E07000` (3.24:1) → **`#7A3C00`** (8.49:1 on white / 8.13:1 on canvas) ※ §1.3 の `color.streak.flame` 経由でテキスト/アイコンに使用
-> - `palette.neutral.500` dark: `#8A909A` (6.54:1) → **`#9CA3AD`** (8.26:1)
-> - `palette.neutral.500` light: `#6E7480` (4.50:1) → **`#4D525C`** (7.84:1 on white / 7.52:1 on canvas)（注釈テキストに使用される `color.fg.muted` の床として 7:1 確保）
 
 | トークン | Light Mode | Dark Mode |
 |---|---|---|
@@ -69,104 +62,121 @@
 | `palette.gabor.bg` | `#808080` | `#808080` |
 | `palette.gabor.fg.high` | `#FFFFFF` | `#FFFFFF` |
 | `palette.gabor.fg.low` | `#000000` | `#000000` |
-| `palette.gabor.mask` | `#808080`（基準）+ ランダム位相縞 | 同左 |
 
-> **ガボール刺激の中性グレー（#808080）は意図的にライト／ダーク共通**。背景輝度 50% を中心に正弦波で輝度を変調するという仕様（spec.md §6.1）を守る。UI のダーク化はガボール領域外の「枠」「ヘッダー」「ボタン」のみ。
+> **ガボール刺激の中性グレー（#808080）は light / dark 共通**。背景輝度 50% を中心に正弦波で輝度変調する仕様を守る。UI のダーク化はガボール領域外（枠・ヘッダー・ボタン・タブ）のみ。
 
 ### 1.3 セマンティックトークン
 
 | トークン | 用途 | Light | Dark |
 |---|---|---|---|
 | `color.bg.canvas` | 画面ベース背景 | `palette.neutral.50` | `palette.neutral.0` |
-| `color.bg.surface` | カード／シートの面 | `palette.neutral.0` | `palette.neutral.100` |
+| `color.bg.surface` | カード/シート/タブバーの面 | `palette.neutral.0` | `palette.neutral.100` |
 | `color.bg.surfaceRaised` | 重ねたサーフェス | `palette.neutral.0` | `palette.neutral.200` |
 | `color.bg.gabor` | ガボール表示領域 | `palette.gabor.bg` | `palette.gabor.bg` |
 | `color.bg.disclaimer` | 免責文の囲み | `#FFF8E1`（薄黄） | `#3E2D0A` |
+| `color.bg.scrim` | ダイアログ背後の暗幕 | `rgba(0,0,0,0.55)` | `rgba(0,0,0,0.70)` |
 | `color.fg.primary` | 主要テキスト | `palette.neutral.900` | `palette.neutral.900` |
 | `color.fg.secondary` | 副テキスト | `palette.neutral.600` | `palette.neutral.500` |
 | `color.fg.muted` | 注釈・補足（**床 7:1**） | `palette.neutral.500` | `palette.neutral.500` |
-| `color.fg.onPrimary` | プライマリボタン上の文字 | `palette.neutral.0` | `palette.neutral.0`（同色） |
+| `color.fg.onPrimary` | プライマリボタン上の文字 | `palette.neutral.0`（白） | `palette.neutral.0`（黒） |
 | `color.fg.onAccent` | アクセント上の文字 | `palette.neutral.0` | `palette.neutral.900` |
 | `color.border.default` | 標準枠線 | `palette.neutral.200` | `palette.neutral.300` |
-| `color.border.strong` | 強調枠線・focus | `palette.brand.primary` | `palette.brand.primary` |
-| `color.border.input` | 入力欄枠線 | `palette.neutral.300` | `palette.neutral.400` |
+| `color.border.strong` | 強調枠線 | `palette.brand.primary` | `palette.brand.primary` |
+| `color.border.input` | 入力欄/スライダートラック枠 | `palette.neutral.300` | `palette.neutral.400` |
 | `color.action.primary` | プライマリ CTA 背景 | `palette.brand.primary` | `palette.brand.primary` |
-| `color.action.primaryHover` | 同上 hover | `palette.brand.primaryHover` | `palette.brand.primaryHover` |
-| `color.action.secondary` | セカンダリ CTA 背景 | `palette.neutral.0` | `palette.neutral.200` |
+| `color.action.primaryHover` | 同 hover/pressed | `palette.brand.primaryHover` | `palette.brand.primaryHover` |
+| `color.action.secondary` | セカンダリ CTA 背景 | `palette.neutral.0` + border | `palette.neutral.200` |
 | `color.action.tertiary` | テキスト型 CTA | 透明 | 透明 |
+| `color.action.danger` | 破壊的操作（全データ削除）背景 | `palette.semantic.error` | `#7A1410`（暗赤、白文字 7:1+） |
 | `color.focus.ring` | フォーカスリング | `#13449D` 3px outline + 2px offset | `#7FB0FF` 同 |
-| `color.streak.flame` | ストリーク炎色（テキスト/アイコン） | `palette.streak.flame.fg` (`#7A3C00`) | `palette.streak.flame.fg` dark (`#FFB266`) |
-| `color.streak.flame.bg` | ストリーク背景（装飾） | `palette.streak.flame.bg` (`#FFE9D6`) | `palette.streak.flame.bg` dark (`#3E2D0A`) |
-| `color.score.line` | V1 スコア折れ線 | `palette.brand.primary` | `palette.brand.primary` |
-| `color.score.point.today` | 当日強調点 | `palette.brand.accent` | `palette.brand.accent` |
-| `color.highlight.correct` | 正解ハイライト | `#FFC53D`（黄、装飾枠のみ／テキスト用途禁止） | `#FFD66B`（同） |
+| `color.tab.active.fg` | アクティブタブの前景 | `palette.brand.primary` | `palette.brand.primary` |
+| `color.tab.inactive.fg` | 非アクティブタブの前景 | `palette.neutral.600`（7.87:1） | `palette.neutral.500`（8.26:1） |
+| `color.tab.active.indicator` | アクティブタブ上辺インジケータ | `palette.brand.primary` | `palette.brand.primary` |
+| `color.streak.flame` | ストリーク炎色（テキスト/アイコン） | `#7A3C00` | `#FFB266` |
+| `color.streak.flame.bg` | ストリーク背景（装飾） | `#FFE9D6` | `#3E2D0A` |
+| `color.score.line` | 日次スコア折れ線 | `palette.brand.primary` | `palette.brand.primary` |
+| `color.score.point.today` | 当日強調点 | `palette.semantic.error`（赤、形でも区別） | `#FF8A82` |
+| `color.toggle.on` | トグル ON 時トラック | `palette.brand.primary` | `palette.brand.primary` |
+| `color.toggle.off` | トグル OFF 時トラック | `palette.neutral.400` | `palette.neutral.400` |
 
-### 1.4 コントラスト検証（実測値）
+### 1.4 v2.0 専用トークン（カウントダウン・結果開示・選択枠）
 
-> 算式：WCAG 2.1 相対輝度比 `(L1 + 0.05) / (L2 + 0.05)`。本表の値は WebAIM Contrast Checker と一致する。Round 3 で Designer が Python 検証スクリプトで実測（小数第 2 位丸め）。
+> **カウントダウン色の 7:1 は「不透明バー背景」を前提に保証される（v2.0 改訂）**。カウントダウン文字は **必ず不透明サーフェス上**に置く（半透明バー越しのガボール縞が実効背景になることを禁止する。下記の `color.countdown.bg.*` を実効背景の下限とする）。半透明背景越しでは実効色がガボール縞の輝度に依存し、white が最悪 4.0:1、warn 黄が 6.68:1、danger 赤が 4.14:1 まで低下し 7:1 を割るため。GB-1 `GameTopBar` はカウントダウン領域を不透明とする（components.md GB-1 参照）。
 
-| ペア | 実効比 | WCAG | 用途 |
+| トークン | Light | Dark | 用途 / コントラスト |
 |---|---|---|---|
-| `color.fg.primary` (#0E0F12) on `color.bg.canvas` light (#FAFAFA) | **18.36:1** | AAA | 主要テキスト |
-| `color.fg.primary` (#F5F6F8) on `color.bg.canvas` dark (#000000) | **19.42:1** | AAA | 主要テキスト |
-| `color.fg.onPrimary` (#FFFFFF) on `color.action.primary` light (#13449D) | **8.97:1** | AAA | プライマリボタン文字 |
-| `color.fg.onPrimary` on `color.action.primaryHover` light (#0F3580) | **11.41:1** | AAA | ボタン hover |
-| `color.fg.onPrimary` (#000000) on `color.action.primary` dark (#7FB0FF) | **9.56:1** | AAA | ダーク時ボタン文字 |
-| `color.fg.secondary` (#4A4F5A) on `color.bg.canvas` light | **7.87:1** | AAA | 副テキスト |
-| `color.fg.secondary` (#9CA3AD) on `color.bg.canvas` dark | **8.26:1** | AAA | 副テキスト（dark） |
-| `color.fg.muted` (#4D525C) on `color.bg.canvas` light | **7.52:1** | AAA | 注釈・補足 |
-| `color.fg.muted` (#9CA3AD) on `color.bg.canvas` dark | **8.26:1** | AAA | 注釈・補足（dark） |
-| `palette.semantic.error` (#A11C16) on `color.bg.surface` light (#FFFFFF) | **7.80:1** | AAA | エラー文字 |
-| `palette.semantic.error` (#FF8A82) on `color.bg.surface` dark (#15171C) | **7.86:1** | AAA | エラー文字（dark） |
-| `palette.semantic.warning` (#7A4300) on `color.bg.surface` light | **7.98:1** | AAA | 警告テキスト |
-| `palette.streak.flame.fg` (#7A3C00) on `color.bg.surface` light | **8.49:1** | AAA | ストリーク炎色（テキスト/アイコン） |
-| `palette.streak.flame.fg` (#FFB266) on `color.bg.surface` dark | **10.09:1** | AAA | ストリーク炎色（dark） |
-| `palette.semantic.success` (#0F7A4F) on `color.bg.surface` light | **5.36:1** | AA | success **テキスト用途禁止**※（装飾アイコンのみ可） |
-| `palette.brand.accent` (#0A6C53) on `color.bg.surface` light | **6.40:1** | AA | アクセント装飾**テキスト用途禁止**※ |
-| `color.fg.onPrimary` (#FFFFFF) on `palette.brand.accent` (#0A6C53) | **6.40:1** | AA | バッジ獲得演出の on-bg 文字（装飾文脈、Bold + 大型化で識別性補強）※ |
+| `color.countdown.bg` | `palette.neutral.0`（#FFFFFF） | `palette.neutral.100`（#15171C） | **カウントダウン文字の実効背景（不透明）**。バー全体をこの不透明色にする、またはカウントダウン直下に同色の不透明ピル/プレートを敷く。下記 normal/warn/danger の 7:1 検証はこの背景に対して行う |
+| `color.countdown.normal` | `#0E0F12`（明背景時の黒）/ `#FFFFFF`（暗背景時の白） | `#FFFFFF` | カウントダウン通常時。`color.countdown.bg` 上で white(dark)=17.93:1 / 黒(light)=18.4:1 |
+| `color.countdown.warn` | `#A11C16`（明背景=#FFFFFF 上で 7.80:1、暗赤）/ `#FFD600`（暗背景=#15171C 上で 12.70:1、鮮黄） | `#FFD600` | 残り 5 秒以下（黄=暗背景時）。明背景では黄が 7:1 を割るため暗赤 `#A11C16` を使う（色＋太字補強で情報伝達、NF-12） |
+| `color.countdown.danger` | `#A11C16`（明背景=#FFFFFF 上で 7.80:1）/ `#FF8A82`（暗背景=#15171C 上で 7.86:1） | `#FF8A82` | 残り 3 秒以下（赤）。**不透明 `color.countdown.bg` 上**でのみ 7:1 を保証（`#FF8A82` on `#15171C`=7.86:1、on `#1A1D24`=7.40:1。半透明越し不可） |
+| `color.selection.subtle` | `rgba(60,64,72,0.85)`（暗灰、選択中・線幅 2px） | `rgba(235,238,242,0.90)`（明灰、選択中） | ガボール直接選択時の選択枠。背景 #808080 上で 3:1 以上を確保し、かつ縞模様の視認を阻害しない控えめさ |
+| `color.selection.subtle.idle` | `rgba(60,64,72,0.30)`（線幅 1px） | `rgba(235,238,242,0.35)` | 未選択時の薄い枠（セル境界を示す程度。任意） |
+| `color.result.check.tp` | `#0A6238`（暗緑） | `#3FCB7E`（明緑） | ✅（TP、実線・不透明）アイコン本体色 |
+| `color.result.check.fn` | `#0A6238` @ 透過 50% | `#3FCB7E` @ 透過 50% | ✅（FN、薄め・取りこぼし）アイコン本体色 |
+| `color.result.cross.fp` | `#A82018`（暗赤） | `#FF6E73`（明赤） | ❌（FP、誤選択）アイコン本体色 |
+| `color.result.overlayBg` | `rgba(255,255,255,0.82)` | `rgba(20,24,32,0.82)` | ✅/❌ アイコン下に敷く半透明背景円（縞模様を完全には隠さない） |
+| `color.result.aggregate.success` | bg `#0A6238` / fg `#FFFFFF` | bg `#3FCB7E` / fg `#000000` | 刺激領域直下の総合 ✅（成功）バッジ |
+| `color.result.aggregate.danger` | bg `#A82018` / fg `#FFFFFF` | bg `#FF6E73` / fg `#000000` | 刺激領域直下の総合 ❌（不正解）バッジ |
 
-※ `semantic.success` (#0F7A4F = 5.36:1) と `brand.accent` (#0A6C53 = 6.40:1) は OPT-5 の 7:1 を満たさない。両色は **装飾用途限定**（バッジ背景・グラフ点・枠線・アイコン塗り）。
-- 「成功」をテキストで表現する場合は、本文を `color.fg.primary` の `font.body.bold`、矢印・✨・チェックマークなどの**装飾アイコンのみ** `palette.semantic.success` を使う（Sprint 5 result-summary の「前回より 0.3 度改善」がこのパターン）。
-- バッジ獲得演出（`AchievementBadge`、`badge-awarded`）は 1.5 秒の一時表示かつ装飾文脈なので 6.40:1 を許容するが、文字を **Bold + 24px 以上**にして識別性を補強し、同時にバッジアイコン（🏅）を併置することで色のみに依存しない情報伝達を担保する（NF-12）。
+### 1.5 コントラスト検証（実測値・主要ペア）
 
-> **主要 UI セット（テキスト・ボタン・主要動線）は 7:1 以上を満たす**（OPT-5 / NF-8）。例外（success / accent）は装飾限定で、テキスト用途では使わない運用ルールで担保する。Generator は実装時に「7:1 検証ユニットテスト」を `tests/contrast.spec.ts` に書き、CI で全トークン組み合わせを自動検査することを推奨する。
+> 算式：WCAG 2.1 相対輝度比。AAA = 7:1 以上、AA = 4.5:1 以上。
+
+| ペア | 実効比 | 等級 | 用途 |
+|---|---|---|---|
+| `fg.primary` (#0E0F12) on `bg.canvas` light (#FAFAFA) | 18.36:1 | AAA | 主要テキスト |
+| `fg.primary` (#F5F6F8) on `bg.canvas` dark (#000000) | 19.42:1 | AAA | 主要テキスト（dark） |
+| `fg.onPrimary` (#FFFFFF) on `action.primary` light (#13449D) | 8.97:1 | AAA | プライマリボタン文字 |
+| `fg.onPrimary` (#000000) on `action.primary` dark (#7FB0FF) | 9.56:1 | AAA | プライマリボタン文字（dark） |
+| `fg.secondary` (#4A4F5A) on `bg.canvas` light | 7.87:1 | AAA | 副テキスト / 非アクティブタブ |
+| `fg.muted` (#4D525C) on `bg.canvas` light | 7.52:1 | AAA | 注釈・補足 |
+| `tab.active.fg` (#13449D) on `bg.surface` light (#FFFFFF) | 8.97:1 | AAA | アクティブタブ文字 |
+| `semantic.error` (#A11C16) on `bg.surface` light | 7.80:1 | AAA | エラー文字 |
+| `streak.flame` (#7A3C00) on `bg.surface` light | 8.49:1 | AAA | ストリーク数値/炎 |
+| `countdown.normal` (#FFFFFF) on opaque dark `countdown.bg` (#15171C) | 17.93:1 | AAA | カウントダウン白（暗背景・不透明バー上） |
+| `countdown.warn` (#FFD600) on opaque dark `countdown.bg` (#15171C) | 12.70:1 | AAA | カウントダウン黄（暗背景・不透明バー上） |
+| `countdown.danger` (#FF8A82) on opaque dark `countdown.bg` (#15171C) | 7.86:1 | AAA | カウントダウン赤（暗背景・不透明バー上。`#1A1D24` 上でも 7.40:1） |
+| `countdown.warn/danger` (#A11C16) on opaque light `countdown.bg` (#FFFFFF) | 7.80:1 | AAA | カウントダウン黄/赤（明背景・不透明バー上、暗赤） |
+| `result.aggregate.success` 白文字 on (#0A6238) | 7.45:1 | AAA | 総合 ✅ バッジ |
+| `result.aggregate.danger` 白文字 on (#A82018) | 7.28:1 | AAA | 総合 ❌ バッジ |
+| `action.danger` 白文字 on (#A11C16) | 7.80:1 | AAA | 全データ削除ボタン |
+
+> **装飾限定の例外**：`palette.semantic.success` (#0F7A4F = 5.36:1) と `palette.brand.accent` (#0A6C53 = 6.40:1) は 7:1 未達のためテキスト用途禁止。バッジ獲得演出の背景・グラフ点・装飾アイコン塗りのみ可。成功をテキスト表現する場合は本文を `fg.primary` Bold + 装飾アイコンのみ success 色を使う。
+> **ガボール背景 #808080 上の ✅/❌**：背景輝度がまちまちな縞模様の上に置くため、必ず `color.result.overlayBg`（半透明背景円）を敷いてから 7:1 を確保する。
+> **カウントダウンの 7:1 は半透明バーでは保証されない（v2.0 改訂・必読）**：ゲーム上部バーを半透明にすると実効背景がガボール縞に依存し、white 最悪 4.0:1 / warn 黄 6.68:1 / danger 赤 4.14:1 まで低下する。したがって**カウントダウン領域は不透明 `color.countdown.bg` を必ず実効背景に持つ**こと（バー全体を不透明にする、またはカウントダウン直下に同色の不透明ピルを敷く）。上表の検証値はすべてこの不透明背景前提。色変化は太字補強と併用し色のみで伝えない（NF-12）、点滅なし（NF-11）、数字のみ（時計アイコンなし、F-12）の原則は維持。
 
 ---
 
 ## 2. タイポグラフィ
 
 ### 2.1 基本方針（OPT-1）
-
-- システムフォント優先（iOS: SF Pro Text／Android: Roboto／Web: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif）
-- 日本語の字面は欧文より小さく見える特性があるため、**本文の床は 18pt = 24px（OPT-1）**。ボタン文字も同等以上を強制
-- ウェイトは Regular / Medium / Bold の 3 段階のみ（Light や ExtraLight は使わない）
-- **重要**：本ドキュメントでは `pt`（DTP ポイント）と `px`（CSS ピクセル）を厳密に区別する。換算は `1pt ≒ 1.333px`（96dpi 前提）。仕様書 spec.md L13 「本文最小 18pt（≒24px）」に整合。
+- システムフォント優先（iOS: SF Pro Text / Android: Roboto / Web: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif）。
+- 日本語の字面は欧文より小さく見えるため本文の床は **18pt = 24px**。ボタン文字も同等以上。
+- ウェイトは Regular(400) / Medium(600) / Bold(700) / Black(900) のみ（Black はカウントダウン danger 強調専用）。
+- `1pt ≒ 1.333px`（96dpi 前提）。spec「本文最小 18pt」に整合。
 
 ### 2.2 タイプスケール
 
-| トークン | 用途 | font-size (px) | （pt 換算） | line-height | weight | letter-spacing |
+| トークン | 用途 | size(px) | (pt) | line-height | weight | 備考 |
 |---|---|---|---|---|---|---|
-| `font.display` | オンボーディング・成果ハイライト | **48** | 36pt | 1.25 | Bold (700) | -0.5px |
-| `font.h1` | 画面タイトル（最大） | **36** | 27pt | 1.3 | Bold (700) | -0.25px |
-| `font.h2` | セクション見出し | **30** | 22.5pt | 1.35 | Bold (700) | 0 |
-| `font.h3` | サブ見出し | **26** | 19.5pt | 1.4 | Medium (600) | 0 |
-| `font.body.lg` | 本文（強調）／ボタン文字 | **26** | 19.5pt | 1.55 | Medium (600) | 0 |
-| `font.body` | 本文（標準）／ボタン文字下限 | **24** | 18pt | 1.6 | Regular (400) | 0 |
-| `font.body.bold` | 本文（強調） | **24** | 18pt | 1.6 | Bold (700) | 0 |
-| `font.caption` | 注釈・タイムスタンプ（**例外、後述**） | **20** | 15pt | 1.5 | Regular (400) | 0 |
-| `font.label` | ラベル・タブ | **24** | 18pt | 1.4 | Medium (600) | 0 |
-| `font.numeric.xl` | スコア・カウントダウン | **72** | 54pt | 1.0 | Bold (700) tabular-nums | 0 |
-| `font.numeric.l` | ストリーク日数 | **48** | 36pt | 1.1 | Bold (700) tabular-nums | 0 |
-
-> Round 3 で `font.body` を 18px → **24px** に是正（OPT-1 / spec.md L13 適合）。同時に見出し系（h1〜h3）と numeric 系も比例して引き上げ、視覚階層を維持。
+| `font.display` | スコア/成果ハイライト | 48 | 36pt | 1.25 | Bold | スコア数値は numeric を使う |
+| `font.h1` | 画面タイトル（最大） | 36 | 27pt | 1.3 | Bold | |
+| `font.h2` | セクション見出し / 上部バー残り秒 | 30 | 22.5pt | 1.35 | Bold | カウントダウンは段階色 |
+| `font.h3` | サブ見出し | 26 | 19.5pt | 1.4 | Medium | |
+| `font.body.lg` | 本文強調 / 主要ボタン文字 | 26 | 19.5pt | 1.55 | Medium | |
+| `font.body` | 本文標準 / ボタン文字下限 | 24 | 18pt | 1.6 | Regular | OPT-1 の床 |
+| `font.body.bold` | 本文強調 | 24 | 18pt | 1.6 | Bold | |
+| `font.label` | ラベル・タブ・グラフ軸 | 24 | 18pt | 1.4 | Medium | グラフ軸ラベルもこれ以上 |
+| `font.caption` | タイムスタンプ・バッジ獲得日付（補助のみ） | 20 | 15pt | 1.5 | Regular | 主要動線では使用禁止 |
+| `font.numeric.xl` | 大カウントダウン/スコア | 72 | 54pt | 1.0 | Bold tabular-nums | danger 時 Black(900) |
+| `font.numeric.l` | ストリーク日数/累計回数 | 48 | 36pt | 1.1 | Bold tabular-nums | |
 
 ### 2.3 使用規則
-
-- 本文は最小 **24px（=18pt、OPT-1 強制）**。ボタン文字も最小 24px。
-- `font.caption`（20px）は **画面の主要動線から外れた補助情報**（タイムスタンプ、グラフ凡例、フォーム helper text 等）のみで使用可。主要 CTA ラベル・操作テキスト・本文・エラーメッセージには使用禁止。20px = 15pt は OPT-1 の床（18pt）を下回るため、**caption 適用箇所はレビューで根拠を必須**とする。
-- 数値（スコア・カウントダウン・閾値）は `tabular-nums` を使い桁ぶれを防ぐ。
-- 行間（line-height）は本文 1.6 以上を確保。日本語の漢字濃度を考慮。
-- 強調は太字またはサイズアップで行う。色強調はセカンダリ手段（OPT-9 / NF-12）。
+- 本文/ボタン文字は最小 24px。グラフ軸ラベルは 18pt（24px）以上。
+- 数値（スコア・カウントダウン・回数）は `tabular-nums` で桁ぶれ防止。
+- 行間 1.6 以上（日本語の漢字濃度を考慮）。
+- 強調は太字/サイズアップで行い、色強調はセカンダリ手段（NF-12）。
+- `font.caption`（20px）は主要動線外の補助情報のみ（タイムスタンプ等）。CTA・操作テキスト・エラー文には使わない。
 
 ---
 
@@ -178,340 +188,295 @@
 |---|---|---|
 | `space.0` | 0 | リセット |
 | `space.1` | 4px | 微小ギャップ |
-| `space.2` | 8px | アイコン余白 |
+| `space.2` | 8px | アイコン余白 / グリッド隙間 |
 | `space.3` | 12px | テキスト行間 |
-| `space.4` | 16px | 一般的余白 |
+| `space.4` | 16px | 一般的余白 / 画面外側余白（スマホ） |
 | `space.5` | 24px | カード内パディング標準 |
 | `space.6` | 32px | セクション間 |
-| `space.7` | 48px | 大きな区切り |
+| `space.7` | 48px | 大きな区切り / 画面外側余白（PC） |
 | `space.8` | 64px | 画面区切り |
 | `space.9` | 96px | フィーチャー間 |
 
-### 3.2 レイアウトグリッド
+### 3.2 レイアウトグリッド・ブレイクポイント
 
-#### スマホ縦（375px 基準、最小 360px〜最大 599px）
-- 外側余白：`space.4`（16px）
-- カード間ギャップ：`space.4`（16px）
-- 主要 CTA は画面下部 `space.6`（32px）の余白内に配置
-- 推奨コンテンツ最大幅：360px
+| ブレイクポイント | 範囲 | 外側余白 | コンテンツ最大幅 |
+|---|---|---|---|
+| スマホ縦 S | 360–374px | space.4（16px） | 100%（最小幅で崩れない） |
+| スマホ縦 M | 375–599px | space.4（16px） | 360px 推奨 |
+| タブレット/小型 PC | 600–1023px | space.6（32px） | 600px 中央寄せ |
+| PC 横 | 1024–1280px | space.7（48px） | 720px 中央寄せ |
 
-#### PC 横（1280×800 基準、最小 600px〜最大 1280px）
-- 外側余白：`space.7`（48px）
-- 主コンテンツ最大幅：720px（中央寄せ）
-- 2 カラムレイアウト時：左 320px ナビ／右 720px コンテンツ／余白 24px
-- ガボール表示領域は最大 480×480px（表示距離 cpd 計算上の上限）
+- **必須検証幅：360 / 375 / 1280px**（NF-21）。タブレットは横レイアウトで PC と同等（NF-22）。
+- スマホは縦持ち固定、PC は横画面。ボトムタブバーは全幅、コンテンツのみ中央寄せ最大幅を適用。
 
-#### ブレイクポイント
-| 名称 | 範囲 | 主用途 |
-|---|---|---|
-| `bp.sm` | 〜599px | スマホ縦 |
-| `bp.md` | 600〜1023px | タブレット縦・小型 PC |
-| `bp.lg` | 1024px〜 | PC 横・タブレット横 |
+### 3.3 角丸・エレベーション
 
-> 仕様 NF-18 に従い 360px〜1280px をサポート。
-
----
-
-## 4. 角丸・シャドウ・エレベーション
-
-### 4.1 角丸（border-radius）
-
-| トークン | 値 | 用途 |
-|---|---|---|
-| `radius.xs` | 4px | バッジ・小タグ |
-| `radius.sm` | 8px | 入力欄・小ボタン |
-| `radius.md` | 12px | カード |
-| `radius.lg` | 16px | モーダル・主要ボタン |
-| `radius.xl` | 24px | シート上端 |
-| `radius.pill` | 999px | ピル型ボタン・トグル |
-| `radius.circle` | 50% | 丸ボタン・固視点 |
-
-### 4.2 エレベーション（シャドウ）
-
-ダークモードでは shadow より border の輝度差で深さを表現する（光源前提のシャドウは薄まる）。
-
-| トークン | Light | Dark |
-|---|---|---|
-| `elevation.0` | none | none |
-| `elevation.1` | `0 1px 2px rgba(15,17,21,0.06), 0 1px 1px rgba(15,17,21,0.04)` | `border 1px palette.neutral.300` |
-| `elevation.2` | `0 4px 8px rgba(15,17,21,0.08), 0 2px 4px rgba(15,17,21,0.04)` | `border 1px palette.neutral.300` + 微量 shadow |
-| `elevation.3` | `0 8px 24px rgba(15,17,21,0.12), 0 4px 8px rgba(15,17,21,0.06)` | `border 1px palette.neutral.400` |
-| `elevation.4` | `0 16px 40px rgba(15,17,21,0.18), 0 8px 16px rgba(15,17,21,0.08)` | `border 1px palette.neutral.500` |
-
----
-
-## 5. モーション・トランジション
-
-### 5.1 基本方針
-
-- **点滅・フラッシュ厳禁**（NF-11 / OPT-9）
-- 画面遷移は 200ms 以内（NF-2）
-- ガボール描画は 60fps 目標、最低 30fps（NF-1）
-- `prefers-reduced-motion: reduce` を尊重し、装飾アニメは即時化
-
-### 5.2 デュレーショントークン
-
-| トークン | 値 | 用途 |
-|---|---|---|
-| `motion.duration.instant` | 0ms | reduced-motion |
-| `motion.duration.fast` | 120ms | hover、押下 |
-| `motion.duration.base` | 200ms | 画面遷移、モーダル開閉 |
-| `motion.duration.slow` | 320ms | シート展開 |
-| `motion.duration.gameFeedback` | 1500ms | 結果ハイライト（拡大） |
-| `motion.duration.gameMaskInterval` | 200ms | マスク提示時間（仕様固定） |
-
-### 5.3 イージング
-
-| トークン | 値 | 用途 |
-|---|---|---|
-| `motion.easing.standard` | `cubic-bezier(0.2, 0.0, 0.0, 1.0)` | 標準遷移 |
-| `motion.easing.decelerate` | `cubic-bezier(0.0, 0.0, 0.2, 1.0)` | 入場 |
-| `motion.easing.accelerate` | `cubic-bezier(0.4, 0.0, 1.0, 1.0)` | 退場 |
-| `motion.easing.linear` | `linear` | ガボールモーフィング |
-
-### 5.4 主要モーション仕様
-
-- **正解ハイライト（F-11）**：1.5 秒間 `transform: scale(1.0 → 1.18 → 1.0)` をイージング `decelerate`、点滅・blink は禁止。代わりに枠色を `color.highlight.correct` に変化させる。
-- **バッジ獲得演出（F-14）**：1.5 秒、`scale(0.6 → 1.0)` の弾性を弱め（overshoot 5% 以下）、フラッシュ無し。
-- **ストリーク+1 演出**：数値カウントアップを 600ms で実行。サウンドは設定 ON 時のみ。
-- **画面遷移**：右進行は左 → 右、戻りはその逆。フェード 200ms。
-
----
-
-## 6. アイコン・イラスト方針
-
-### 6.1 アイコン
-- **サイズ**：16 / 20 / 24 / 32 / 48px の 5 段階
-- 操作系アイコン（戻る／設定／閉じる）は最小 24px、タップ領域 48pt 以上を確保
-- ストロークは 2px、太め（老眼配慮）
-- ピクトグラム化された幾何形を優先。装飾的なフラットイラストは控える
-- **必須セット**：home, play, pause, settings, close, back, info, eye, eye-cover-left, eye-cover-right, chart, badge, flame（ストリーク）, check, alert, distance（人と画面の絵）, clock, target, refresh, trash
-
-### 6.2 イラスト
-- 線画＋単色塗り。色は brand.primary / accent / neutral の 3 種以内
-- 「画面から N cm 離れる」「片眼を覆う」「遠くを見る（クールダウン）」の 3 シチュエーション用イラストを共通アセット化
-- 表情のあるキャラクターは入れない（医療っぽさを出さない・ふざけ過ぎない）
-
-### 6.3 動画・GIF
-- ローディングスピナー以外、装飾アニメ用 GIF/Lottie は使用しない（OPT-9）
-
----
-
-## 7. ガボール表示領域パレット（中性グレー）
-
-ガボール刺激は本来「物理輝度を制御する刺激」であり、UI の配色とは独立に管理する。
-
-| トークン | 値 | 用途 |
-|---|---|---|
-| `gabor.bg.luminance` | 50%（#808080） | 背景輝度（ライト・ダーク共通） |
-| `gabor.contrast.range` | 0.15〜0.6 | コントラスト範囲（spec.md §6.1）|
-| `gabor.envelope.sigmaRange` | 0.3°〜1.0° | ガウス窓 SD（視野角） |
-| `gabor.fixation.color.light` | `#000000` | 固視点（明背景非対象、グレー上は黒） |
-| `gabor.fixation.color.dark` | `#000000` | 同上（グレー上では一律黒） |
-| `gabor.fixation.size` | 0.5° | 固視点十字サイズ（spec.md §7.3） |
-| `gabor.frame.padding` | 24px | ガボール領域の外周マージン |
-| `gabor.frame.bg` | グレー領域は UI bg と同じにせず明確に分離 | 領域認知を助ける |
-
-> **重要**：ガボール表示エリアの背景は OS のダークモードに**追従しない**。常に #808080（中性グレー）で固定する。物理コントラスト計算の前提（背景輝度 = 50%）を崩さないため。
-
----
-
-## 8. インタラクション状態
-
-### 8.1 全インタラクティブ要素の必須状態
-
-| 状態 | 視覚的差異 |
+| トークン | 値 |
 |---|---|
-| `default` | トークンに従う初期表示 |
-| `hover`（PC のみ） | 背景を 1 段濃く／淡く（`palette.brand.primaryHover` 等） |
-| `pressed/active` | 背景を 2 段変化＋ scale(0.98) |
-| `disabled` | opacity 0.5、cursor not-allowed、aria-disabled |
-| `focus-visible` | 3px outline `color.focus.ring` ＋ 2px offset。**全インタラクティブ要素必須**（NF-9） |
-| `loading` | 内容を保持したまま spinner を上重ね、操作禁止 |
+| `radius.sm` | 8px（チップ・小ボタン） |
+| `radius.md` | 12px（カード・入力欄） |
+| `radius.lg` | 16px（大カード・ダイアログ） |
+| `radius.pill` | 9999px（トグル・チップ） |
+| `elevation.0` | none（フラット面） |
+| `elevation.1` | y2 blur8 rgba(0,0,0,0.08)（カード） |
+| `elevation.2` | y4 blur16 rgba(0,0,0,0.12)（ダイアログ・タブバー上辺影） |
 
-### 8.2 タップ・キーボード等価
-
-- 全ボタンは Enter / Space で起動可能
-- グリッド型 UI（Game 1）は矢印キーで移動可（Web 版必須）
-- フォームのトグルは Space で切替
+ダークモードでは影の代わりに `border.default` 1px + `bg.surfaceRaised` で階層を表現する（影は暗背景で見えにくいため）。
 
 ---
 
-## 9. アクセシビリティ規範（システムレベル）
+## 4. モーション
 
-### 9.1 ARIA・ラベル
+| トークン | 値 | 用途 |
+|---|---|---|
+| `motion.duration.fast` | 120ms | トグル・チェック |
+| `motion.duration.base` | 200ms | 画面遷移・フェード（NF-2：遷移 200ms 以内） |
+| `motion.duration.result` | 200ms | ✅/❌ オーバーレイのフェードイン |
+| `motion.duration.badge` | 1500ms | バッジ獲得演出（1 度のみ・点滅なし） |
+| `motion.easing.standard` | cubic-bezier(0.2,0,0,1) | 標準 |
 
-- 全インタラクティブ要素に `aria-label` または可視テキスト
-- アイコンのみのボタンは `aria-label` 必須
-- モーダルは `role="dialog"`, `aria-modal="true"`, `aria-labelledby`
-- ライブ領域（カウントダウン等）は `aria-live="polite"`、点滅しない更新
+- **点滅エフェクト全面禁止**（NF-11、てんかん配慮）。カウントダウンの色変化補強は太字化のみ。
+- **prefers-reduced-motion: reduce 時**：UI 装飾アニメーション（フェード・スライド・バッジ演出の動き）を 0ms 化または静的表示に。**ただし変化検出ゲーム本体の刺激アニメ（回転・周波数変化）は課題上必須のため抑制対象外**（NF-13）。
+- バッジ獲得演出は拡大/フェードのみ（点滅・回転なし）。reduced-motion 時は静的にバッジ + テキストを 1500ms 表示。
 
-### 9.2 フォーカス管理
+---
 
-- モーダル開時：最初のインタラクティブ要素にフォーカス
-- モーダル閉時：起動元要素に戻す
-- フォーカスは `outline-color` だけで示さない（形・位置でも判別）
+## 5. インタラクション原則
 
-### 9.3 スクリーンリーダー専用文言
+- **ホバー（Web/PC）**：背景を `primaryHover` 等に。ガボールパッチはホバーで枠を `selection.subtle.idle` 程度に薄く示してよい。
+- **focus（NF-9）**：`color.focus.ring` で 3px outline + 2px offset。全インタラクティブ要素が Tab で到達、Enter/Space で起動。
+- **pressed/active**：背景を 1 段濃く、トランジション `motion.duration.fast`。
+- **disabled**：不透明度 0.4 + ポインタ無効。結果開示中はガボール格子全体を pointer-events: none に。
+- **トランジション**：`motion.duration.base` を標準。タブ切替は即時（ステート保持）。
 
-| 場所 | 読み上げテキスト例 |
+---
+
+## 6. アクセシビリティ規範（NF-7〜15）
+
+- 全インタラクティブ要素 48pt 以上、ボタン/設定行/タブ 56pt 以上（OPT-2）。
+- focus-visible 3px outline + 2px offset（NF-9）。
+- 色のみで状態を伝えない（NF-12）：タブ選択は色＋上辺インジケータ＋太字ラベル、カウントダウン色変化は太字化補強、トグル ON/OFF は位置＋ラベル「ON/OFF」併記、グラフ当日点は色＋形（◆）で区別。
+- 点滅禁止（NF-11）。prefers-reduced-motion 尊重（NF-13、ゲーム刺激は例外）。
+- aria-checked / aria-pressed で選択状態を明示（NF-15）。ガボール選択セルは `role="checkbox"` + `aria-checked`。
+- スクリーンリーダー（NF-10）：主要要素に aria-label。結果開示で「正解」「不正解」を読み上げ（`aria-live="assertive"` で 1 度）。
+- Skip link（Web、NF-14）：各タブ画面上部に「メインコンテンツへスキップ」。
+- カウントダウン：`aria-live="polite"`（残り 6 秒以上）→ `assertive`（残り 5 秒以下）。残り 3/2/1 秒で毎秒読み上げ。
+
+---
+
+## 7. ガボール描画品質規範（NF-26〜28b）
+
+### 7.1 クリッピング方式（Designer 規範）
+「**実サイズの N 倍で生成 → 矩形枠でクリッピング**」方式を採用。
+- **N = 1.5（Designer 提案値）**：表示見かけサイズ（例 100px 角）に対し内部生成は 1.5 倍（150px 角）で行う。ガウス窓の裾野が表示矩形の外まで連続的に伸びた状態で、表示時に見かけサイズの矩形枠でクリップする。
+- 効果：角度を最小単位ずつ変えても、また回転中も、パッチ枠と縞模様の間に背景色（グレー）が見える隙間が出ない（NF-27 / NF-28）。
+- 矩形マスクを採用する根拠：複数パッチを格子配置するとき矩形のほうがレイアウトが安定し隙間トラッキングが容易。
+- Generator が 1.4（√2）で十分と判断すれば妥協可だが、本書は 1.5 を提案値とする（最小角度変化でも四隅露出を完全回避するマージン）。
+
+### 7.2 変化/静止の弁別性（NF-28b、§9 と連動）
+- 静止パッチの初期角度ばらつき・初期空間周波数ばらつきと、変化パッチの単位時間あたり変化量を、ユーザーが「変化中／静止」を区別できるよう調整する。具体提案値は §9。
+- 静止パッチ同士の初期角度差は、変化パッチの最大変化量より十分大きく取る（後述：静止同士は 12° 以上離す）。
+
+### 7.3 角度刻み・最小可視差（NF-26、Designer 提案値）
+最小可視差（向きの違いを弁別できる最小角度差）。表示サイズ大・cpd 高ほど小さい差を弁別可能。
+
+| パッチ辺長（格子内 1 個） | 1.5 cpd | 3 cpd | 6 cpd |
+|---|---|---|---|
+| 70px（5×5 格子相当） | 5° | 3° | 2° |
+| 90px（4×4 格子相当） | 4° | 2.5° | 1.5° |
+| 110px（3×3 格子相当） | 3° | 2° | 1° |
+| 140px（PC 横・3×3） | 2° | 1° | 0.5° |
+
+ガボール刺激の基準 cpd は **3 cpd**（@ 40cm 視聴）を v2.0 既定とする（縞 3〜4 本が見える明瞭さ。Generator 調整可）。
+
+---
+
+## 8. ステータスバー回避規範（NF-29 / NF-30）
+
+| 画面 | 扱い |
 |---|---|
-| ホーム CTA | 「3 分コースを始める。本日のトレーニングを開始します」 |
-| ガボール領域（Game 2） | 「縞模様の 1 枚目が表示されています。続けて 2 枚目が表示されます」 |
-| カウントダウン | 「残り 8 秒」（ポーリング 1 秒間隔、polite） |
-| 結果サマリ | 「正答率 78 パーセント、今回の閾値は 4.2 度。前回より 0.3 度改善しました」 |
+| **ゲームプレイ中（ガボール格子提示）** | フルスクリーン許容（NF-29）。ガボール背景 #808080 がステータスバー領域まで広がってよい。ただし上部バーの文字・X ボタン・残り秒数は必ずセーフエリア内に収める（top inset 分オフセット） |
+| **それ以外**（距離リマインド / ホーム結果 / 履歴 / 設定 / オンボ / 全ダイアログ / データリセット通知） | セーフエリア準拠（NF-30）。iOS=SafeAreaInset、Android=StatusBar.currentHeight、Web=`env(safe-area-inset-*)` + viewport-fit=cover |
 
-### 9.4 動きへの配慮
-
-- `prefers-reduced-motion: reduce` 環境ではガボールモーフィングは「ステップ提示」に切り替える（30fps 連続変化 → 5 段階階段状）。これは Game 1 ロジックの分岐として Generator が実装する
-- 結果ハイライトの拡大は維持（拡大は許容、点滅は不可）
+- ボトムタブバーは常に bottom セーフエリア（iOS Home Indicator / Android nav bar）の内側に置き、タブバー下端にセーフエリア分のパディングを足す。
+- `SafeAreaWrapper` コンポーネント（components.md §SA-1）を全非ゲーム画面で必須使用。`mode="game"` は top inset を無視、`mode="default"` は全 inset 適用。
 
 ---
 
-## 10. レスポンシブ規範
+## 9. パラメータ可動範囲・初期値（AS-23、Designer 仮置き）
 
-### 10.1 スマホ縦（360〜599px）
-- 1 カラム
-- 主要 CTA は画面下部から `space.6` 上に固定
-- ナビは下部 tab か上部 header の二択（本プロダクトは「設定アイコンのみ右上」「ホームに戻るは左上戻る矢印」のシンプル方式）
+> spec は n/m/r/a/b の具体値を断定しない。本節で Designer が表示サイズ・cpd・体感から妥当な範囲・初期値・刻みを提案する。ユーザーが実機で確定する運用。Generator は本表を初期実装値として採用してよい。
 
-### 10.2 タブレット縦・PC（600〜1280px）
-- 中央寄せ最大幅 720px
-- ガボール領域はビューポートの短辺の 60% を上限としてスケール
-- フォントサイズはスマホとほぼ同等（OPT-1 を理由に PC で大幅増にしない、視聴距離前提のため）
+### 9.1 提案値テーブル
 
-### 10.3 セーフエリア
-- iOS のノッチ／ホームバーを回避（top safe area + 16px、bottom safe area + 16px）
-- Web 版でも `env(safe-area-inset-*)` を尊重
+| パラメータ | 記号 | 範囲（min–max） | 初期値 | 刻み(step) | UI | 根拠 |
+|---|---|---|---|---|---|---|
+| 格子サイズ | **n** | 3–5（n×n） | **4** | 1 | セグメント（3/4/5）+ プレビュー | 3×3=9 は易、5×5=25 は探索負荷大。4×4=16 が中庸。パッチ辺長が視認下限を割らない上限が 5 |
+| 1 ラウンド秒数 | **m** | 10–60 秒 | **20** | 5 秒 | スライダー（目盛付） | 短すぎると探索不能、長すぎると注視疲労。20 秒で n=4 を一巡できる |
+| ラウンド数 | **r** | 3–10 | **5** | 1 | スライダー（目盛付） | 1 セッション = m×r。初期 20×5 = 約 100 秒 + 結果開示で 2〜3 分の気軽さ |
+| 回転速度 | **a** | 2–12 °/sec | **6** | 1 °/sec | スライダー（目盛付） | 2°/s=ぎりぎり動いて見える（最難）、12°/s=明確（最易）。初期 6°/s は m=20 秒で 120° 回る |
+| 周波数変化速度 | **b** | 0.05–0.40 hz/sec | **0.15** | 0.05 | スライダー（目盛付） | 基準 3 cpd を中心に増減。0.05=微差（最難）、0.40=明確（最易）。20 秒で 3.0 hz の振れ幅 |
 
----
+> **スライダーの「難→易」方向の明示**：a/b は「小さいほど難しい」。スライダー左端ラベル「難しい（小）」、右端「易しい（大）」を 18pt で併記し、数値も表示（例「回転速度 6 °/秒」）。n/m/r は数値＋単位を表示。
 
-## 11. コピーライティング規範（OPT-6）
+### 9.2 高難度バッジ判定の閾値（§5 / B-06〜B-08、Designer 提案値）
+- **a が「遅い」域**：a ≤ 3 °/sec（範囲下位 1/4 = 2,3）
+- **b が「小さい」域**：b ≤ 0.10 hz/sec（範囲下位 1/4 = 0.05,0.10）
+- **「最も難しい域」（B-08 達人の眼）**：a ≤ 3 かつ b ≤ 0.10（両方が最難域）
+- **「クリア＝高スコア」**：そのセッションが誤選択なし（FP=0）かつ全変化パッチ正答（FN=0）＝実質スコア 100。B-06/07/08 はこの条件 + 該当難度設定で達成。
 
-### 11.1 推奨表現
-- 「鍛える」よりも「ならす／ほぐす」
-- 「治す」「改善する」「回復する」は使わない（薬機法配慮）
-- 「視力」より「見え方の感じ」
-- 数値（V1 スコア）は「医療スコアではありません」と必ず注記
+### 9.3 変化パッチ個数分布（NF-28b、Designer 提案値）
+- 各ラウンドの変化パッチ個数は格子総数に対しランダム。**1 個〜floor(n²/3) 個**の範囲で抽選（n=4 なら 1〜5 個、n=3 なら 1〜3 個、n=5 なら 1〜8 個）。
+- 確率は少なめ寄り（探索の手応えを保つ）：個数 k の確率は k が小さいほど高い緩い減衰分布。**0 個は出さない**（必ず 1 個以上が変化）。
+- 変化の内訳（回転のみ/周波数のみ/両方）は各変化パッチごとに独立ランダム（回転 40% / 周波数 40% / 両方 20% を提案）。画面に個数・内訳は一切表示しない。
 
-### 11.2 専門用語の扱い
-- 「ガボール」「V1」「staircase」「2AFC」「odd one」を画面に出す場合は括弧書きで日常語を併記
-  - 例：「ガボール（縞模様）」「V1 スコア（このアプリ独自の点数）」
-
-### 11.3 ボタン文言
-- 動詞＋目的の形（「3 分コースを始める」「設定を保存する」「同意する」「もう一度」）
-- 英語混在は避ける（「OK」「Cancel」より「はい」「いいえ」）
-- 例外：「Game 1 / 2 / 3」は短く伝えるため許容（必ず日本語名を併記する：「Game 1（変化察知）」）
-
-### 11.4 エラー・警告
-- 否定文より肯定文：「同意していません」より「同意のチェックを入れてください」
-- 解決策を必ず併記
+### 9.4 静止パッチの弁別マージン（NF-28b、Designer 提案値）
+- 静止パッチの初期角度は互いに **12° 以上**離れたランダム値（a の最大 12°/s × 1 秒分より大きく、「静止」と「1 秒見たときの回転」を区別可能なマージン）。
+- 静止パッチの初期空間周波数は基準 3 cpd ± ランダム（2.0–4.0 cpd）。変化パッチの b による変化と静止のばらつきが混同しないよう、静止のばらつきは固定（時間変化しない）ことが弁別の鍵。
 
 ---
 
-## 12. ロケール／日付
+## 10. 音・ハプティクストークン（F-14）
 
-- 日本語のみ
-- 日付フォーマット：`M月D日（曜）` （例：4月29日（火））、グラフ軸は `M/D`
-- 週は ISO 週（月曜開始）
-- 時間表示：24 時間制
+### 10.1 イベント別発火パターン
 
----
+| イベント | 音種 | 継続 | 音量 | ハプティクス | 設定 OFF 時 |
+|---|---|---|---|---|---|
+| ラウンド正解（総合 ✅） | correct（明るい上行 2 音） | 200ms | 60% | light 1 回 | 音OFF=無音 / 振動OFF=無振動 |
+| ラウンド不正解（総合 ❌） | wrong（やや低音 1 音） | 200ms | 60% | medium 1 回 | 同上 |
+| カウントダウン残り 3/2/1 秒 | tick（短い tic） | 80ms | 40/50/60% | なし | 音OFF=無音 |
+| セッション完了 | end（柔らかい完了音） | 400ms | 50% | なし | 音OFF=無音 |
+| バッジ獲得 | badge（達成感 3 音） | 600ms | 70% | heavy + medium 2 連 | 同上 |
 
-## 13. データ可視化規範
-
-### 13.1 折れ線グラフ（V1 スコア）
-- 軸ラベルは `font.label`（24px Medium）
-- グリッド線は `palette.neutral.200` の細線、強調は不要
-- データ点は半径 6px、当日のみ半径 10px ＋ `color.score.point.today`
-- 0〜100 固定スケール、Y 軸目盛は 0/25/50/75/100
-- データ欠損日はラインを切る（補間しない）
-- 7 日未満時のメッセージは `font.body`（24px）で重畳
-
-### 13.2 数値強調表示
-- 大きい数字（スコア・連続日数）は `font.numeric.xl` / `font.numeric.l`
-- 数字の左右に単位を必ず併記（「4.2 度」「23 日」「78 点」）
+### 10.2 規範
+- アセット：`assets/sounds/correct.mp3` / `wrong.mp3` / `tick.mp3` / `end.mp3` / `badge.mp3`。
+- サイレントモード（OS）尊重（NF-33）：音は鳴らさずハプティクスは発火（振動 OFF でない限り）。
+- アプリ内「音 ON/OFF」「振動 ON/OFF」は OS 設定よりさらに細かい個別制御。
+- **試行中（採点前の注視中）は採点フィードバック以外の音/振動を発火しない**（F-14 受け入れ基準）。ティック音は採点直前の予告として残り 3/2/1 秒のみ。
+- 音再生レイテンシ 100ms 以内（NF-31）。ハプティクス強度は端末標準（iOS medium / Android strong）（NF-32）。
+- 実装抽象は `../rapidreading2/src/platform/audio.ts` の `playSound(key, opts)` / `triggerHaptics(pattern)` 流用想定（技術詳細は Generator 領分）。
 
 ---
 
-## 14. ガボール描画コンポーネント API（システム層の規範）
-
-詳細実装は `components.md` で。ここでは「全画面で守るべき呼び出し API シグネチャ」を提示する。
-
-```ts
-type GaborPatchProps = {
-  // 物理パラメータ（spec.md §6.1 範囲）
-  cpd: 1.5 | 3 | 6 | 9;             // 空間周波数
-  contrast: number;                  // 0.15〜0.6
-  orientationDeg: number;            // 0〜180（0=水平、90=垂直）
-  phaseRad: number;                  // 0〜2π
-  sigmaDeg: number;                  // 0.3〜1.0（ガウス窓 SD、視野角）
-
-  // レンダリング制御
-  sizePx: number;                    // 描画キャンバス辺長（cpd と sigma から導出）
-  pixelDensity: number;              // dpr 補正
-  viewingDistanceCm: 30 | 40 | 50;  // キャリブレーション値
-
-  // a11y
-  ariaLabel?: string;                // 既定「縞模様の刺激」
-  testId?: string;                   // テスト用
-};
-
-type GaborRenderEngine = "canvas2d" | "webgl" | "skia";
-```
-
-すべての画面でガボールを描画する場合は `<GaborPatch />` コンポーネント経由で呼び出し、生 Canvas を画面に直接描画してはならない（一貫性とテスト容易性）。
+## 11. アプリアイコン（スコープ外・現状維持）
+- v2.0 ではアプリアイコン差し替えはスコープ外（AS-17）。現状の `app.json` のアイコン設定を維持する。Designer は新規アイコン仕様を出さない。
 
 ---
 
-## 15. アセット命名規約
+## 12. 永続化スキーマとの一貫性（データモデル §6 横断確認）
+
+UI が要求する状態が spec §6 のスキーマに乗ることを確認する（バッチ設計の利点）。
+
+| UI が要求する状態 | スキーマ上の格納先 | 確認 |
+|---|---|---|
+| オンボ済み判定（初回のみオンボ） | `UserProfile.onboardingCompleted` | OK |
+| 免責同意日時（設定のバージョン情報表示） | `UserProfile.disclaimerAgreedAt` | OK |
+| 70 代以上警告（オンボ年齢層） | `UserProfile.ageGroup` | OK |
+| 距離リマインドの cm | `UserProfile.viewingDistanceCm` | OK |
+| 設定タブの n/m/r/a/b/採点方式 | `Settings.*` | OK |
+| ダーク/音/振動/片眼 | `Settings.darkMode/soundEnabled/hapticsEnabled/oneEyeGuidance` | OK |
+| セッション結果 0〜100 スコア | `SessionRecord.sessionScore` | OK |
+| ラウンドの ✅/❌ オーバーレイ（TP/FP/FN） | `RoundRecord.tp/fp/fnCount` + ラウンド実行時の patch 状態（実行時メモリ、永続化は集計のみ） | OK（開示は実行時 state、記録は集計） |
+| 高難度バッジ判定の paramsSnapshot | `SessionRecord.paramsSnapshot` | OK |
+| 履歴の日次スコア折れ線（同日 max） | `DailyStats.bestSessionScore` | OK |
+| 連続日数ストリーク | `Streak.currentStreak` | OK |
+| 累計プレイ回数 | `PlayStats.totalSessions` | OK |
+| バッジ獲得/未獲得 | `BadgeStatus.earned/earnedAt` | OK |
+| 中断は記録しない | `SessionRecord.completedAt = null` を記録対象外とする（または保存しない） | OK |
+| データリセット通知 1 度だけ | 旧名前空間消去フラグ（実装判断、`gaboreye:v2:*` 初期化の有無で判定） | OK |
+
+> **設計判断**：✅/❌ オーバーレイの「どのパッチが TP/FP/FN だったか」はラウンド実行中のメモリ state で保持し、永続化は `RoundRecord` の集計カウント（tp/fp/fnCount）のみ。開示は採点直後のその場の state を使うため、過去ラウンドの座標を永続化する必要はない（スキーマと矛盾しない）。
+
+---
+
+## 13. コピーライティング規範（OPT-6 / 薬機法配慮）
+
+- 医療効果を断定しない（AS-18）。「視力が回復」「治る」は禁止。「自助セルフケア」「目を集中させる」「見つける練習」等の表現を使う。
+- 数値スコアは「0〜100 のスコア」と呼び、「視力 0.X」のような医療数値は使わない（F-04）。
+- 優しい言い回し（急かさない、責めない）。未選択でラウンドが終わっても「残念」等の否定語を避け、結果は ✅/❌ の事実提示にとどめる。
+- 主要文言の i18n キー命名規約は §14。
+
+---
+
+## 14. i18n キー命名規約（日本語ロケールのみ、NF-25）
 
 ```
-assets/
-  icons/                  // SVG、24px 基準で出力
-    home.svg
-    settings.svg
-    eye-cover-left.svg
-    flame.svg
-    ...
-  illustrations/
-    distance-30cm.svg
-    distance-40cm.svg
-    distance-50cm.svg
-    eye-cover.svg
-    cooldown-far.svg
-  badges/
-    b-01-first-step.svg
-    ...
-    b-08-all-improve.svg
+# タブ
+tab.home = "ホーム"
+tab.history = "履歴"
+tab.settings = "設定"
+
+# ゲーム（F-01/F-12）
+game.countdown.remaining = "残り {n} 秒"
+game.abort.iconLabel = "ゲームを中断"
+
+# 採点・結果（F-02/F-03/F-04）
+result.aggregate.correct = "正解"
+result.aggregate.wrong = "不正解"
+result.check.tp.label = "正解（選択済み）"
+result.check.fn.label = "正解（選び逃し）"
+result.cross.fp.label = "不正解（誤選択）"
+
+# セッション結果（F-08）
+session.score.label = "今回のスコア"
+session.score.outOf = "／100"
+session.streak = "連続 {n} 日"
+session.replay = "もう一度"
+
+# 中断ダイアログ（F-07）
+abort.dialog.title = "プレイを中断しますか？"
+abort.dialog.body = "中断するとこのセッションは記録されません。"
+abort.dialog.ok = "中断する"
+abort.dialog.cancel = "続ける"
+
+# 起動フロー（F-06）
+onboarding.disclaimer.agree = "同意する"
+onboarding.age.title = "年齢層を選んでください（任意）"
+onboarding.distance.title = "視聴距離を選んでください"
+onboarding.howto.title = "ゆっくり変化するパッチを見つけてタップ"
+distanceReminder.headline = "画面から {n}cm 離れてください"
+distanceReminder.autoStart = "{n} 秒後に自動で始まります"
+distanceReminder.oneEye = "片目を覆ってください（任意）"
+
+# データリセット（F-11）
+dataReset.title = "最新版へのアップデート"
+dataReset.body = "最新版へのアップデートのため、過去データをリセットしました"
+dataReset.cta = "OK"
+
+# 履歴（F-09）
+history.dailyScore.title = "日次スコアの推移"
+history.streak.title = "連続日数"
+history.totalPlays.title = "累計プレイ回数"
+history.empty.lessThan7Days = "もう少しデータが集まると傾向が見えます"
+history.badges.title = "バッジ"
+
+# バッジ（§5）
+badge.B-01.name = "はじめの一歩"
+badge.B-01.hint.locked = "初めてのセッションを完了すると獲得"
+# ... B-02〜B-11 は components.md / sprint-8 screens.md 参照
+
+# 設定（F-13）
+settings.param.gridSize = "格子サイズ（n×n）"
+settings.param.roundSeconds = "1 ラウンドの秒数"
+settings.param.roundCount = "ラウンド数"
+settings.param.rotationSpeed = "回転速度"
+settings.param.sfChangeSpeed = "周波数変化速度"
+settings.scoringMode.title = "採点方式"
+settings.scoringMode.autoNoConfirm = "自動採点（確定なし）"
+settings.scoringMode.autoConfirm = "自動採点（確定ボタンあり）"
+settings.scoringMode.allCorrectAdvance = "全問正解で次へ"
+settings.viewingDistance = "視聴距離"
+settings.darkMode = "ダークモード"
+settings.sound = "効果音"
+settings.haptics = "振動"
+settings.oneEye = "片眼ガイダンス"
+settings.disclaimer.read = "免責事項を読む"
+settings.dataDelete = "全データ削除"
+settings.version = "バージョン"
 ```
 
 ---
 
-## 16. ダークモード切替
-
-- 設定値：`system` / `light` / `dark`（spec.md §10.1）
-- `system` 時は `prefers-color-scheme` を尊重
-- 切替時のフラッシュ防止：CSS variables で `data-theme` 属性切替＋ 200ms クロスフェード
-- ガボール表示領域は切替対象外（常にグレー）
-
----
-
-## 17. アンチパターン（やってはいけないこと）
-
-- **OPT-1 未満（24px = 18pt 未満）の本文・ボタンテキスト**（注釈用 `font.caption` 20px は §2.3 の制約下でのみ許容）
-- 32pt（≒43px）未満のタップ領域、または 48px 未満の `minHeight`（OPT-2 違反）
-- 自動でフェードアウトするボタン（OPT-7 違反）
-- 点滅・フラッシュアニメ（NF-11 / OPT-9 違反）
-- ガボール背景を OS のダーク化に追従させる（物理計算前提が崩れる）
-- 色のみで状態を伝える（NF-12 違反）
-- 「視力 0.X」「治る」「効果あり」と断言する文言（A-1 / 11.1 違反）
-- 1 画面に主要 CTA を 3 個以上並べる（OPT-3 違反）
-- **コントラスト比 7:1 未満のテキストトークン使用**（OPT-5 / NF-8 違反、§1.4 で 7:1 を満たさないトークンは装飾用途に限定する運用）
-
----
-
-## 18. システムバージョン
-
-- v1.0（凍結対象）
-- 後続変更は Designer amendment モードで実施
+## 15. システムバージョン
+- v2.0（本書が最新規範）。
+- 後続変更は Designer amendment モードで実施（オーケストレーター/ユーザー承認必須）。

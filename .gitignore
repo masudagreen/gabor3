@@ -63,3 +63,12 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# S1: ルート直下の作業用ビルド成果物（ユーザー資産。削除はせず追跡対象外にする）
+#  - eas build --local が出力するネイティブ APK（数十 MB）
+#  - 開発中の手動スクショ等の作業用 PNG（docs/ 配下の QA スクショは追跡継続）
+/build-*.apk
+/*.apk
+/*.png
+/*.jpg
+/*.jpeg

@@ -15,8 +15,8 @@
 
 import React from 'react';
 import { useColorScheme } from 'react-native';
-import { Colors, getColors, ThemeMode } from './tokens';
-import { DarkModePreference } from '../state/storage';
+import { Colors, getColors, ThemeMode, DarkModePreference } from './tokens';
+import { installFocusVisibleStyle, setFocusRingColor } from './focusStyle';
 
 export type ThemeContextValue = {
   /** ユーザー設定（system / light / dark） */
@@ -61,6 +61,15 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
     systemScheme ?? (detected === 'dark' ? 'dark' : 'light');
   const mode = resolveThemeMode(preference, effectiveSystem);
   const colors = React.useMemo(() => getColors(mode), [mode]);
+
+  // Web：focus-visible の大域スタイルを 1 度注入し、focus ring 色を現テーマに同期（NF-9）。
+  // Native では no-op（document には触れない）。
+  React.useEffect(() => {
+    installFocusVisibleStyle();
+  }, []);
+  React.useEffect(() => {
+    setFocusRingColor(colors.focusRing);
+  }, [colors.focusRing]);
 
   const value = React.useMemo<ThemeContextValue>(
     () => ({ preference, mode, colors }),

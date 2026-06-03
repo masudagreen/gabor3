@@ -3,29 +3,37 @@
     "name": "GaborEye",
     "slug": "gabor",
     "owner": "masudagreen",
-    "version": "0.1.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
     "splash": {
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#1A1D24"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gaboreye.app"
+      "bundleIdentifier": "com.gaboreye.app",
+      "icon": "./assets/icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "backgroundColor": "#1A1D24"
       },
+      "icon": "./assets/icon.png",
       "package": "com.gaboreye.app"
     },
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "favicon": "./assets/favicon.png"
     },
-    "plugins": [],
+    "plugins": [
+      "expo-audio"
+    ],
     "experiments": {
       "tsconfigPaths": true
     },

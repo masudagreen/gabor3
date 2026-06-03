@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>S22-G03-PLAY — G-03 周辺視野ハント (中央線方式廃止)</title>
+<style>
+  :root {
+    --bg-canvas: #0F1115;
+    --gabor-bg: #808080;
+    --fg-primary: #FFFFFF;
+    --fg-muted: #B7BCC9;
+    --countdown-normal: #FFFFFF;
+    --selection-subtle: rgba(220, 224, 232, 0.55);
+    --selection-idle: rgba(220, 224, 232, 0.30);
+    --fixation: #FFFFFF;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-canvas);
+    color: var(--fg-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    box-sizing: border-box;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  .device {
+    max-width: 375px; width: 100%; min-height: 667px;
+    margin: 24px auto;
+    background: var(--gabor-bg);
+    border-radius: 32px; overflow: hidden;
+    border: 1px solid #2A2D34;
+    display: flex; flex-direction: column;
+  }
+  .statusbar {
+    height: 88px;
+    background: rgba(26, 29, 36, 0.85);
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 16px 16px 12px 16px;
+  }
+  .close { width: 48px; height: 48px; background: transparent; border: none; color: var(--fg-primary); font-size: 28px; }
+  .countdown { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .placeholder { width: 48px; }
+  .guide {
+    text-align: center;
+    background: rgba(26, 29, 36, 0.7);
+    padding: 12px 16px;
+    font-size: 22px;
+    font-weight: 500;
+  }
+  .stim-area {
+    position: relative;
+    width: min(320px, calc(100% - 32px));
+    height: min(320px, calc(100vw - 32px));
+    margin: 24px auto;
+  }
+  .fixation {
+    position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 18px; height: 18px;
+    color: var(--fixation);
+    font-size: 22px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    user-select: none;
+  }
+  .patch {
+    position: absolute;
+    width: 56px; height: 56px;
+    border-radius: 28px;
+    overflow: hidden;            /* 矩形クリッピング(円表示は外形のみ角丸) */
+    box-shadow: inset 0 0 0 1px var(--selection-idle);
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    background: var(--gabor-bg);
+  }
+  .patch.selected {
+    box-shadow: inset 0 0 0 2px var(--selection-subtle);
+  }
+  .patch:focus-visible {
+    outline: 3px solid #FFFFFF;
+    outline-offset: 2px;
+  }
+  .patch svg { display: block; width: 100%; height: 100%; overflow: hidden; }
+  .label-pc {
+    text-align: center; color: var(--fg-muted); font-size: 14px; margin: 16px 24px;
+  }
+  /* 8 周辺位置（時計位置：12 / 1.5 / 3 / 4.5 / 6 / 7.5 / 9 / 10.5）。
+     半径は表示領域 320px に対し 110px ≒ 離心角 8° @ 40cm */
+  .pos-12   { top: 50%; left: 50%; transform: translate(calc(0px - 50%), calc(-110px - 50%)); }
+  .pos-1_5  { top: 50%; left: 50%; transform: translate(calc(78px - 50%), calc(-78px - 50%)); }
+  .pos-3    { top: 50%; left: 50%; transform: translate(calc(110px - 50%), calc(0px - 50%)); }
+  .pos-4_5  { top: 50%; left: 50%; transform: translate(calc(78px - 50%), calc(78px - 50%)); }
+  .pos-6    { top: 50%; left: 50%; transform: translate(calc(0px - 50%), calc(110px - 50%)); }
+  .pos-7_5  { top: 50%; left: 50%; transform: translate(calc(-78px - 50%), calc(78px - 50%)); }
+  .pos-9    { top: 50%; left: 50%; transform: translate(calc(-110px - 50%), calc(0px - 50%)); }
+  .pos-10_5 { top: 50%; left: 50%; transform: translate(calc(-78px - 50%), calc(-78px - 50%)); }
+</style>
+</head>
+<body>
+
+<div class="label-pc">S22-G03-PLAY — G-03 周辺視野ハント（中央線方式廃止 / 円周 8 ガボール / 単一選択 / 矩形クリッピング N=1.5）</div>
+<div class="device" role="region" aria-label="G-03 周辺視野ハント プレイ画面">
+  <div class="statusbar">
+    <button class="close" aria-label="ゲームを中断">×</button>
+    <div class="countdown" role="timer" aria-live="polite">47</div>
+    <div class="placeholder"></div>
+  </div>
+  <div class="guide" id="g03-guide">違う向きのパッチをタップ</div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <pattern id="g03-stripes" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#404040"/>
+        <rect width="7" height="14" fill="#c0c0c0"/>
+      </pattern>
+      <radialGradient id="g03-window" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#808080" stop-opacity="0"/>
+        <stop offset="70%"  stop-color="#808080" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#808080" stop-opacity="0.50"/>
+      </radialGradient>
+    </defs>
+  </svg>
+
+  <div class="stim-area" role="group" aria-describedby="g03-guide" aria-label="円周 8 ガボールパッチ">
+    <!-- 中央固視点 (選択不能) -->
+    <div class="fixation" aria-hidden="true">＋</div>
+
+    <!-- 12 時：base 30° -->
+    <div class="patch pos-12" role="radio" aria-checked="false" tabindex="0"
+         aria-label="12 時の方向のガボール" data-target-id="g03-pos-12">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(30 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-stripes)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-window)"/>
+      </g></svg>
+    </div>
+    <!-- 1.5 時：base 30° -->
+    <div class="patch pos-1_5" role="radio" aria-checked="false" tabindex="0"
+         aria-label="1 時半の方向のガボール" data-target-id="g03-pos-1.5">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(30 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-stripes)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-window)"/>
+      </g></svg>
+    </div>
+    <!-- 3 時：odd-one (向きが違う 80°、選択中の例) -->
+    <div class="patch pos-3 selected" role="radio" aria-checked="true" tabindex="0"
+         aria-label="3 時の方向のガボール（選択中・正解候補）" data-target-id="g03-pos-3">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(80 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-stripes)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-window)"/>
+      </g></svg>
+    </div>
+    <div class="patch pos-4_5" role="radio" aria-checked="false" tabindex="0"
+         aria-label="4 時半の方向のガボール" data-target-id="g03-pos-4.5">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(30 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-stripes)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-window)"/>
+      </g></svg>
+    </div>
+    <div class="patch pos-6" role="radio" aria-checked="false" tabindex="0"
+         aria-label="6 時の方向のガボール" data-target-id="g03-pos-6">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(30 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-stripes)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-window)"/>
+      </g></svg>
+    </div>
+    <div class="patch pos-7_5" role="radio" aria-checked="false" tabindex="0"
+         aria-label="7 時半の方向のガボール" data-target-id="g03-pos-7.5">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(30 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-stripes)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-window)"/>
+      </g></svg>
+    </div>
+    <div class="patch pos-9" role="radio" aria-checked="false" tabindex="0"
+         aria-label="9 時の方向のガボール" data-target-id="g03-pos-9">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(30 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-stripes)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-window)"/>
+      </g></svg>
+    </div>
+    <div class="patch pos-10_5" role="radio" aria-checked="false" tabindex="0"
+         aria-label="10 時半の方向のガボール" data-target-id="g03-pos-10.5">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(30 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-stripes)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g03-window)"/>
+      </g></svg>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center; color:#B7BCC9; font-size:14px; max-width:600px; margin:16px auto; padding: 0 24px;">
+  <strong>v1.2 改訂点：</strong> v1.0 期の「中央から正解パッチへの線」表示は完全廃止（A10 確定）。結果開示は F-10 統一仕様（パッチ上 ✅/❌ + 刺激領域直下に試行全体総合 ✅/❌）。
+</div>
+
+</body>
+</html>

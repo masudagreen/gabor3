@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+GaborEye App Icon — マスター SVG（v1.2 Stage 3）
+spec-v11.md v1.2 §F-20、design-v11/components.md §29、system.md §1.16
+
+図柄：ガボールパッチ 45°（左下→右上、時計回り）
+背景：#1A1D24
+パッチ中心 (512, 512)、半径 410（マスター 80%）
+縞模様は angle=45°、コントラスト 0.78、ガウス窓 sigma=287
+
+注：本 SVG はビルド時に scripts/generate-icons.py で PNG に変換される。
+SVG を SVG のまま使う場合は Native では rasterize できないため非推奨。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#1A1D24" />
+  <defs>
+    <radialGradient id="gauss" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="white" stop-opacity="1" />
+      <stop offset="100%" stop-color="white" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="stripe" patternUnits="userSpaceOnUse"
+             width="131" height="131" patternTransform="rotate(45)">
+      <rect x="0" y="0" width="131" height="65.5" fill="#E8E8E8" />
+      <rect x="0" y="65.5" width="131" height="65.5" fill="#181818" />
+    </pattern>
+    <mask id="gaussMask">
+      <circle cx="512" cy="512" r="410" fill="url(#gauss)" />
+    </mask>
+  </defs>
+  <g mask="url(#gaussMask)">
+    <rect width="1024" height="1024" fill="url(#stripe)" />
+  </g>
+</svg>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>S22-COUNTDOWN-PATTERN — F-07.1 統一カウントダウン UI (3 段階遷移)</title>
+<style>
+  :root {
+    --bg-canvas: #0F1115;
+    --bg-surface: #1A1D24;
+    --fg-primary: #FFFFFF;
+    --fg-muted: #B7BCC9;
+    --countdown-normal: #FFFFFF;
+    --countdown-warn: #FFD600;
+    --countdown-danger: #FF8A82; /* v1.2 amendment: 7.0:1 on #1A1D24 */
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-canvas);
+    color: var(--fg-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    box-sizing: border-box;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  .grid {
+    max-width: 1100px; margin: 24px auto;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    padding: 24px;
+  }
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: 1fr; gap: 16px; padding: 16px; }
+    .row2 { grid-template-columns: 1fr 1fr !important; }
+  }
+  .card {
+    background: var(--bg-surface);
+    border-radius: 24px;
+    padding: 24px;
+    text-align: center;
+  }
+  .card .label {
+    font-size: 18px; color: var(--fg-muted); margin-bottom: 16px;
+  }
+  .card .desc {
+    font-size: 16px; color: var(--fg-muted); margin-top: 16px;
+  }
+  /* sample value 144px is for visual emphasis only.
+     Normative xl preset is 72px (see size cards below). */
+  .countdown-xl {
+    font-size: 144px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1; letter-spacing: -0.04em;
+    margin: 16px 0;
+  }
+  .countdown-xl.warn { color: var(--countdown-warn); font-weight: 700; }
+  .countdown-xl.danger { color: var(--countdown-danger); font-weight: 900; }
+  .countdown-xl.normal { color: var(--countdown-normal); font-weight: 700; }
+  h1 { text-align: center; margin: 24px 24px 0 24px; font-size: 26px; font-weight: 600; }
+  .subtitle { text-align: center; color: var(--fg-muted); font-size: 16px; padding: 0 16px; }
+  .applies {
+    max-width: 1100px; margin: 0 auto 24px auto; padding: 0 24px;
+    color: var(--fg-muted); font-size: 16px;
+  }
+  .applies ul { padding-left: 20px; }
+  .row2 {
+    max-width: 1100px; margin: 0 auto 24px auto;
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; padding: 0 24px;
+  }
+  .size-card { background: var(--bg-surface); border-radius: 16px; padding: 16px; text-align: center; }
+  .size-card .num {
+    font-variant-numeric: tabular-nums;
+    color: var(--countdown-normal);
+    font-weight: 700;
+  }
+  .size-card.warn .num { color: var(--countdown-warn); }
+  .size-card.danger .num { color: var(--countdown-danger); font-weight: 900; }
+  .size-sm .num { font-size: 24px; }
+  .size-md .num { font-size: 26px; }
+  .size-lg .num { font-size: 30px; }
+  .size-xl .num { font-size: 72px; }
+  .size-card .name { font-size: 14px; color: var(--fg-muted); margin-top: 8px; }
+  .note {
+    max-width: 1100px; margin: 0 auto 24px auto; padding: 12px 24px;
+    color: var(--fg-muted); font-size: 14px;
+    background: rgba(255,138,130,0.08); border-left: 3px solid var(--countdown-danger);
+  }
+</style>
+</head>
+<body>
+
+<h1>S22-COUNTDOWN-PATTERN — F-07.1 統一カウントダウン UI</h1>
+<p class="subtitle">通常時（白）→ 残り 5 秒（黄）→ 残り 3 秒（赤・Black 900）。点滅禁止、サイズジャンプなし、tabular-nums 固定</p>
+<div class="note">
+  <strong>注：</strong> 上 3 段カードの 144px は学習用の<em>強調表示サンプル</em>。規範の xl サイズは <strong>72px</strong>（下段「サイズプリセット」の xl カードを参照）。
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="label">通常時（残り 6 秒以上）</div>
+    <div class="countdown-xl normal">47</div>
+    <div class="desc">color.countdown.normal #FFFFFF<br/>weight: Bold 700<br/>tabular-nums</div>
+  </div>
+  <div class="card">
+    <div class="label">≤ 5 秒（warn）</div>
+    <div class="countdown-xl warn">5</div>
+    <div class="desc">color.countdown.warn #FFD600<br/>weight: Bold 700<br/>tabular-nums</div>
+  </div>
+  <div class="card">
+    <div class="label">≤ 3 秒（danger）</div>
+    <div class="countdown-xl danger">3</div>
+    <div class="desc">color.countdown.danger #FF8A82<br/>weight: Black 900<br/>tabular-nums<br/>(7.0:1 on #1A1D24)</div>
+  </div>
+</div>
+
+<h1>サイズプリセット（4 段階・規範値）</h1>
+<div class="row2">
+  <div class="size-card size-sm"><div class="num">47</div><div class="name">sm 24px</div></div>
+  <div class="size-card size-md"><div class="num">47</div><div class="name">md 26px (F-10)</div></div>
+  <div class="size-card size-lg"><div class="num">47</div><div class="name">lg 30px (F-07)</div></div>
+  <div class="size-card size-xl"><div class="num">47</div><div class="name">xl 72px (F-15/F-16)</div></div>
+</div>
+
+<div class="applies">
+  <strong>適用箇所（4 箇所一律）：</strong>
+  <ul>
+    <li>F-07 ゲーム時間 60 秒（GameStatusBarV12 中央、size=lg）</li>
+    <li>F-15 クールダウン 10 秒（画面中央、size=xl）</li>
+    <li>F-16 距離リマインド 3 秒（画面下中央、size=xl、最初から赤）</li>
+    <li>F-10 結果オーバーレイ 10 秒（次へボタン右内側、size=md）</li>
+  </ul>
+  <strong>音 / 振動連動（F-19）：</strong> 残り 3 / 2 / 1 秒で「ティック音」発火（音 OFF 時は無音）
+</div>
+
+</body>
+</html>

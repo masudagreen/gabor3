@@ -1,99 +1,202 @@
 /**
- * ja.ts — Sprint 7-C / spec.md §4「日本語のみ」「将来対応可能な文言構造」。
+ * ja.ts — spec.md §4「日本語のみ」「将来対応可能な文言構造」（AS-20）。
  *
- * v1 では日本語ロケールのみ。本モジュールは UI 文言を集約し、t() ヘルパー経由で
- * 参照する構造を整える。v2 で多言語化する際は、同じキーで en.ts / zh.ts を
- * 増やすだけで済むようにキー命名は安定化させる。
+ * v2.0 リブートに伴い、v1.x の画面別辞書（home / settings / disclaimer 等）は
+ * いったん撤去した。各文言は対応スプリント（S2 設定 / S6 オンボ・免責 など）で
+ * v2.0 デザインに合わせて再投入する。本ファイルは i18n キー基盤（t / tArray /
+ * interpolate）が動くための最小辞書のみを保持する。
  *
- * 移行方針（Sprint 7-C スコープ）：
- *   - HomeScreen / SettingsScreen / DisclaimerSheet の主要文言のみキー化
- *   - 残りの画面は v2 で順次移行（今回は構造下準備のみ）
+ * 多言語化する際は、同じキーで en.ts 等を増やすだけで済むよう命名を安定化させる。
  */
 
 export const ja = {
   app: {
     title: 'GaborEye',
-    version_label: 'V{{version}}',
+    version_label: 'v{{version}}',
   },
   common: {
     next: '次へ',
     back: '戻る',
     close: '閉じる',
     cancel: 'キャンセル',
+    ok: 'OK',
     save: '保存',
     saved: '保存しました',
-    skip_to_main: 'メインコンテンツへ移動',
+    loading: '読み込み中',
+    load_error: 'データを読み込めませんでした',
+  },
+  nav: {
+    home: 'ホーム',
+    history: '履歴',
+    settings: '設定',
+    home_tab: 'ホームタブ',
+    history_tab: '履歴タブ',
+    settings_tab: '設定タブ',
+    skip_to_content: 'メインコンテンツへスキップ',
   },
   home: {
-    title: 'GaborEye',
-    open_settings: '設定を開く',
-    start_course: '3 分コースを始める',
-    start_course_again: 'もう一度 3 分コース',
-    start_course_aria: '3 分コースを始める。本日のトレーニングを開始します',
-    today_completed_title: '✅ 今日のトレーニング完了',
-    today_completed_body: '3 分コースをまた明日',
-    section_single_play: '単体ゲームで遊ぶ：',
-    section_pick_single: 'または、ゲームだけ単体で：',
-    today_v1_score: '今日の V1 スコア',
-    today_v1_score_aria: '今日の V1 スコア {{score}} 点',
-    progress_button: '📈 進捗グラフ',
-    progress_button_aria: '進捗グラフを開く',
-    badges_button: '🏅 バッジ一覧',
-    badges_button_aria: 'バッジ一覧を開く',
-    daily_best_button: '🏆 日次ベスト',
-    daily_best_button_aria: '日次ベストを開く',
-    debug_button: 'デバッグ表示',
+    // S5 ではホームはゲーム本体（プレイ中）か、待機/結果のプレースホルダ。
+    // 本格的なセッション結果・自動開始フローは S6。
+    placeholder_title: 'ホーム',
+    placeholder_body: 'ここでゲームをプレイします。',
+    start: 'プレイを始める',
+    // S6 セッション結果カード（RC-1、F-08）
+    result_label: '今回のスコア',
+    score_unit: '／100',
+    streak_label: '連続 {{n}} 日',
+    streak_zero: '今日からスタート',
+    replay: 'もう一度',
+    result_region_label:
+      'セッション結果。スコア {{score}} 点（100 点満点）。連続 {{streak}} 日',
+  },
+  onboarding: {
+    // S6-1 オンボーディング（初回のみ、F-06/F-10）
+    step_progress: 'ステップ {{current}}/{{total}}',
+    welcome_title: 'GaborEye へようこそ',
+    understand_check: '内容を理解しました',
+    agree: '同意する',
+    age_title: '年齢層を選んでください（任意）',
+    age_40s: '40代',
+    age_50s: '50代',
+    age_60s: '60代',
+    age_70s: '70代以上',
+    age_unspecified: '未回答',
+    age_70s_warning: '視覚に不安がある場合は医師にご相談ください。',
+    distance_title: '視聴距離を選んでください',
+    overview_title: 'ゲームの遊び方',
+    overview_body: 'ゆっくり変化（回転・周波数）するパッチを見つけてタップ。',
+    start_game: 'はじめる',
+  },
+  disclaimer: {
+    title: '免責事項',
+    // F-10：医療機器でない旨・対象外ユーザー（18pt 以上で表示）
+    body_intro:
+      '本アプリは医療機器ではありません。自助セルフケア目的のアプリです。',
+    body_targets_label: '次の方は対象外です：',
+    targets: [
+      'お子さま（小学生以下）',
+      '70 代以上の方',
+      '重度の視覚障害がある方',
+      '強度近視（-6D 以上）の方',
+      '目に違和感のある方',
+    ],
+    body_note: '目に痛みや違和感を感じたら、ただちに使用を中止してください。',
+  },
+  distance: {
+    // S6-2 距離リマインド（F-06/OPT-10/F-12）
+    title: '画面から {{n}}cm',
+    title_suffix: '離れてください',
+    one_eye_left: '左目を覆ってください（任意）',
+    one_eye_right: '右目を覆ってください（任意）',
+    one_eye_cover: '片目を覆ってください（任意）',
+    auto_start: '{{n}} 秒後に自動で始まります',
+    abort_label: '中断',
+  },
+  history: {
+    // S5 ではプレースホルダのみ（本実装は S7）。
+    placeholder_title: '履歴',
+    placeholder_body: 'プレイを続けると、ここに記録が表示されます。',
+    // S7 履歴タブ・進捗グラフ（F-09 グラフ部）
+    title: '履歴',
+    chart_heading: '日次スコアの推移',
+    // グラフ aria-label 要約（spec a11y）
+    chart_summary: '過去 {{days}} 日の日次スコア。最新 {{date}} は {{score}} 点',
+    chart_summary_empty: 'まだ日次スコアのデータがありません',
+    // データ少時案内（F-09「目安 7 日未満」）
+    trend_hint: 'もう少しデータが集まると傾向が見えます',
+    // StatTile
+    streak_label: '連続日数',
+    streak_unit: '日',
+    streak_value_label: '連続日数 {{n}} 日',
+    total_label: '累計プレイ回数',
+    total_unit: '回',
+    total_value_label: '累計プレイ回数 {{n}} 回',
+    // S8 バッジ一覧（F-09 バッジ部）
+    badges_heading: 'バッジ',
+    badges_placeholder: 'バッジは順次解放されます。',
+    badges_empty: 'プレイを続けるとバッジが解放されます。',
+    // 軸ラベル
+    axis_y_max: '100',
+    axis_y_mid: '50',
+    axis_y_min: '0',
+  },
+  badge: {
+    // S8 バッジセル（BG-1）・獲得演出（BG-2）
+    earned_label: '獲得済み',
+    earned_at: '{{date}} 獲得',
+    locked_label: '未獲得',
+    // SR 用 aria-label：獲得 / 未獲得 + ヒント
+    cell_earned_label: '{{name}}、獲得済み（{{date}}）',
+    cell_locked_label: '{{name}}、未獲得：{{hint}}',
+    // 獲得演出（BadgeAwardToast）。aria-live で読み上げ
+    award_announce: 'バッジ獲得：{{name}}',
+    award_title: 'バッジ獲得',
+  },
+  abort: {
+    title: 'プレイを中断しますか？',
+    message: '中断するとこのセッションは記録されません。',
+    confirm: '中断する',
+    cancel: '続ける',
+  },
+  game: {
+    grid_label: '変化しているパッチをすべて選んでください',
+    patch_label: 'パッチ {{row}}-{{col}}',
+    abort_label: 'ゲームを中断',
+    countdown_remaining: '残り {{n}} 秒',
+    confirm: '確定',
+    confirm_label: '回答を確定する',
+  },
+  result: {
+    correct: '正解',
+    wrong: '不正解',
+    tp_label: '正解（選択済み）',
+    fn_label: '正解（選び逃し）',
+    fp_label: '不正解（誤選択）',
+    summary: '{{aggregate}}。正答 {{tp}} 件、誤選択 {{fp}} 件、選び逃し {{fn}} 件',
   },
   settings: {
     title: '設定',
-    back_aria: '設定を閉じてホームに戻る',
-    section_display: '画面表示',
-    section_audio: '音と振動',
-    section_environment: '視聴環境',
-    section_data: 'データと法的事項',
-    section_app: 'アプリ情報',
-    item_dark_mode: 'ダークモード',
-    item_sound: '効果音',
-    item_sound_sub: 'ボタン操作などの音',
-    item_haptics: '振動(ハプティクス)',
-    item_haptics_sub_native: '操作時に短い振動',
-    item_haptics_sub_web: 'Web ブラウザでは無効',
-    item_bgm: 'Game 3 リズム BGM',
-    item_bgm_sub: '周辺視野ハント中の BGM',
-    item_distance: '視聴距離',
-    item_one_eye: '片眼ガイダンス',
-    item_disclaimer: '免責事項を読む',
-    item_delete_all: '全データを削除',
-    item_delete_all_sub: '記録・設定をすべて消去',
-    item_version: 'バージョン情報',
-    saved_dark_mode: 'ダークモードを保存しました',
-    saved_one_eye: '片眼ガイダンスを保存しました',
-    saved_distance: '視聴距離を保存しました',
-    saved_generic: '{{label}}を保存しました',
-    distance_close_aria: '視聴距離設定を閉じる',
-    distance_save_label: '保存して閉じる',
-    agreed_date: '同意日時：{{date}}',
-  },
-  disclaimer: {
-    title: 'ご利用前にお読みください',
-    body_intro:
-      'このアプリは医療機器ではありません。\n' +
-      'ガボールパッチによる視覚トレーニングは、\n' +
-      '脳の視覚処理を鍛えることを目的とした自助セルフケアです。\n' +
-      '特定の視力回復・治療効果を保証するものではありません。',
-    warn_header: '以下の方は本アプリのご利用を推奨しません：',
-    warn_lines: [
-      '・お子さま（小学生以下）',
-      '・70 歳以上の方',
-      '・白内障・緑内障・加齢黄斑変性などの診断歴がある方',
-      '・強度近視（-6D 以上）の方',
-      '・目に違和感、痛み、かすみ、急激な視力低下のある方',
-    ],
-    body_outro:
-      '利用中に違和感を感じた場合はすぐ中断し、\n眼科医にご相談ください。',
-    agree_label: '上記に同意します',
-    agree_button: '同意する',
-    read_to_end_hint: '※ 最後まで読んでチェックを入れてください',
+    group_game: 'ゲーム設定',
+    group_scoring: '採点方式',
+    group_display: '表示・視聴',
+    group_feedback: 'フィードバック',
+    group_other: 'その他',
+    grid_size: '格子サイズ（n×n）',
+    round_seconds: '1 ラウンドの秒数',
+    round_count: 'ラウンド数',
+    rotation_speed: '回転速度',
+    sf_change_speed: '周波数変化速度',
+    unit_seconds: '秒',
+    unit_deg_per_sec: '°/秒',
+    unit_hz_per_sec: 'hz/秒',
+    scoring_auto_no_confirm: '自動採点（確定なし）',
+    scoring_auto_no_confirm_desc: '時間切れで自動採点します',
+    scoring_auto_confirm: '自動採点（確定ボタンあり）',
+    scoring_auto_confirm_desc: '確定ボタンで早く締められます',
+    scoring_all_correct: '全問正解で次へ',
+    scoring_all_correct_desc: 'すべて正しく選ぶと進みます',
+    viewing_distance: '視聴距離',
+    unit_cm: 'cm',
+    dark_mode: 'ダークモード',
+    dark_system: 'OS連動',
+    dark_light: '明',
+    dark_dark: '暗',
+    sound: '効果音',
+    haptics: '振動',
+    one_eye: '片眼ガイダンス',
+    one_eye_off: 'なし',
+    one_eye_left: '左',
+    one_eye_right: '右',
+    one_eye_alternate: '交互',
+    read_disclaimer: '免責事項を読む',
+    delete_all: '全データ削除',
+    version: 'バージョン',
+    disclaimer_agreed_at: '免責同意',
+    disclaimer_not_agreed: '未同意',
+    delete_confirm_title: '全データを削除しますか？',
+    delete_confirm_message:
+      'すべての記録・設定・バッジが消えます。元に戻せません。',
+    delete_confirm_ok: '削除する',
   },
 } as const;
 

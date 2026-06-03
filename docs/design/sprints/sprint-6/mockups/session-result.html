@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GaborEye v2.0 — セッション結果（モック）</title>
+<style>
+  :root{--canvas:#FAFAFA;--surface:#fff;--fg:#0E0F12;--label:#4A4F5A;--primary:#13449D;--flame:#7A3C00;--tabact:#13449D;--tabin:#4A4F5A;}
+  @media (prefers-color-scheme:dark){:root{--canvas:#000;--surface:#15171C;--fg:#F5F6F8;--label:#9CA3AD;--primary:#7FB0FF;--flame:#FFB266;--tabact:#7FB0FF;--tabin:#9CA3AD;}}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{background:var(--canvas);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",sans-serif;display:flex;justify-content:center;}
+  .device{width:100%;max-width:412px;min-height:100vh;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,44px);}
+  .content{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;}
+  .label{font-size:24px;font-weight:500;color:var(--label);}
+  .score{font-size:72px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;}
+  .outof{font-size:26px;font-weight:600;color:var(--label);}
+  .streak{font-size:24px;color:var(--flame);font-weight:700;}
+  .replay{min-height:64px;width:100%;max-width:340px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-size:26px;font-weight:700;cursor:pointer;margin-top:12px;}
+  @media (prefers-color-scheme:dark){.replay{color:#000;}}
+  .replay:focus-visible{outline:3px solid var(--fg);outline-offset:2px;}
+  .tabs{display:flex;background:var(--surface);border-top:1px solid #2B2F39;padding-bottom:env(safe-area-inset-bottom,16px);}
+  .tab{flex:1;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:none;border:none;color:var(--tabin);font-size:18px;}
+  .tab.active{color:var(--tabact);font-weight:700;position:relative;}
+  .tab.active::before{content:"";position:absolute;top:0;left:20%;right:20%;height:3px;background:var(--tabact);}
+</style>
+</head>
+<body>
+<div class="device">
+  <div class="content" role="region" aria-label="セッション結果。スコア 72 点（100 点満点）。連続 5 日">
+    <span class="label">今回のスコア</span>
+    <div><span class="score">72</span><span class="outof"> ／100</span></div>
+    <span class="streak">🔥 連続 5 日</span>
+    <button class="replay">もう一度</button>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true">● ホーム</button>
+    <button class="tab" role="tab" aria-selected="false">▢ 履歴</button>
+    <button class="tab" role="tab" aria-selected="false">⚙ 設定</button>
+  </nav>
+</div>
+</body>
+</html>

@@ -2,6 +2,680 @@
 
 このドキュメントは Generator が各スプリント完了時に追記する、**動かすための単一情報源** です。
 
+> **本書の構成（2026-05-30 更新）**：冒頭の **§0 v2.0** が現在のソース・オブ・トゥルース。
+> §1 以降は v1 / v1.1 / v1.2 の歴史的記録（**アーカイブ**）として残置する。
+> v2.0 開発では §0 を参照すること。v1.x の節は旧コードの所在把握用。
+
+---
+
+## 0. v2.0 セットアップ + Sprint 1 完了状態（2026-05-30）
+
+### 0.1 結論（Sprint 1 完了時点）
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| Node / npm | **OK** | node v22.9.0 / npm 10.8.3（`.tool-versions` 通り） |
+| `npm test`（Jest） | **緑（全 PASS）** | **7 スイート / 46 件 PASS**。v1.x 依存テストを全撤去し、流用基盤（GaborPatch / gaborPixels / calibration / theme）の疎通テストのみ残置 |
+| `npx tsc --noEmit`（typecheck） | **エラー 0** | strict。`src/` も `App.tsx` も型エラーなし |
+| `npm run build:web`（本番 Web バンドル） | **PASS** | `dist/_expo/static/js/web/AppEntry-*.js` ≈ **318 kB**（旧 778 kB / 148 modules に縮小）。`npx serve -s dist` で HTTP 200・`<title>GaborEye</title>` 確認 |
+| dev サーバー（`npm run web`） | フォールバック採用 | CLAUDE.md 方針に従い、検証は **静的本番ビルド（build:web）+ serve** で実施（EMFILE 回避） |
+| Expo SDK | **54 系維持** | 55 以降に上げない（CLAUDE.md 制約） |
+
+**Sprint 1 でやったこと**：v1 / v1.1 / v1.2 の全ゲーム実装・旧ルーター・旧データ層・旧テストを撤去し、
+v2.0 で流用する描画/テーマ基盤だけを残した。`App.tsx` は v2.0 の最小プレースホルダに退避（足場が緑）。
+v2.0 の本実装（データ層・設定・ゲームコア・タブ・履歴 …）は **S2 以降**で構築する。
+
+### 0.2 起動・テスト・ビルドコマンド（v2.0）
+
+```bash
+cd /Users/np_202212_11/projects/gabor3
+npm install                    # 依存解決（初回のみ）
+
+npm test                       # Jest 全テスト（7 スイート / 46 件 PASS）
+npx tsc --noEmit               # 型検査（エラー 0）
+npm run build:web              # 本番 Web バンドル → dist/（PASS）
+npx serve -s dist -l 4599      # dist を HTTP 配信して動作確認（dev サーバー代替）
+```
+
+dev サーバーを直接使う場合は `npm run web`。macOS で `EMFILE` が出たら
+**`npm run build:web` → `npx serve -s dist`** に切り替える（CLAUDE.md §6 フォールバック）。
+
+### 0.3 現在のエントリと足場（S1 後）
+
+- **エントリ**：`App.tsx` → `SafeAreaProvider` → `ThemeProvider` → 最小プレースホルダ画面（`GaborEye / v2.0 / 準備中`）。S2 以降でボトムタブ構成へ置換する
+- **テスト設定**：`package.json` の `jest` ブロック（preset: `jest-expo`、`jest.setup.ts` で safe-area mock）。`testMatch` は `tests/**` と `src/**/*.test.ts(x)`
+- **型設定**：`tsconfig.json`（strict、パスエイリアス `@/` `@components/` 等、`app.json` の `experiments.tsconfigPaths` で Metro 解決）
+- **音抽象**：`expo-audio` / `expo-haptics` プラグイン導入済み（F-14 / S9 で利用予定。S1 では v1.2 の `src/platform/audio.ts` 抽象は撤去済み）
+
+### 0.4 S1 で残した「流用基盤」（v2.0 で再利用）
+
+| ファイル | 役割 | v2.0 での使途 |
+|---|---|---|
+| `src/components/GaborPatch.tsx` | ガボール単一描画（cpd / orientationDeg / contrast / sigma を props 受け、NF-27/28 クリッピング品質） | S3/S4 の n×n 格子・回転＋周波数変化の描画土台 |
+| `src/lib/gaborPixels.ts` | 純 JS で RGBA バッファ → BMP data URL | GaborPatch の内部計算 |
+| `src/lib/calibration.ts` | cpd→px・ppd・推奨パッチサイズ・device 推定 | 視聴距離 → 表示サイズ算定（F-13 / 描画） |
+| `src/theme/tokens.ts` | デザイントークン（色・タイポ・spacing・tapTarget・countdown / resultBadge 色 等。v2.0 確定値） | 全画面のスタイル基盤 |
+| `src/theme/ThemeProvider.tsx` | ダークモード（system/light/dark）解決 Context。`DarkModePreference` を tokens.ts へ移設し自己完結化 | F-13 ダークモード即時切替 |
+| `src/theme/focusStyle.ts` | Web `focus-visible` 3px outline ヘルパー（NF-9） | a11y（S10） |
+| `src/i18n/`（index + ja） | `t / tArray / interpolate` の i18n キー基盤（AS-20）。`ja.ts` は最小辞書にリセット | 各スプリントで v2.0 文言を再投入 |
+
+### 0.5 S1 で撤去したもの（v1.x 完全リタイア、spec.md §10）
+
+- **A. v11 ツリー（v1.1/v1.2）**：`src/screens/v11/` / `src/components/v11/` / `src/components/v12/` / `src/lib/v11/` / `src/navigation/v11/` / `src/i18n/v11/` / `src/hooks/v11/`
+- **B. v1 最初期ツリー**：`src/screens/*.tsx`（全 14 画面）/ `src/screens/Onboarding/` / `src/navigation/AppRouter.tsx`
+- **v1.x lib（流用基盤以外）**：`game1/2/3` / `staircase` / `badges` / `streak` / `v1score` / `dailyBest` / `weeklyStats` / `gaborOrientations` / `keyboardShortcuts` / `motion` / `appState` / `audio` / `haptics`
+- **v1.x state**：`src/state/storage.ts` / `storage-v11.ts` / `gameIds-v11.ts` / `gameRegistry.ts`（S2 で `gaboreye:v2:*` 名前空間として新規構築）
+- **v1.x components（GaborPatch 以外の全 28 個）**：Button / Toggle / DisclaimerSheet / GaborGrid / GaborMask / ClockAnswerButtons / V1ScoreChart / StreakBadge … 等
+- **`src/platform/audio.ts`**：F-14（S9）で `../rapidreading2/src/platform/audio.ts` 抽象を流用予定のため一旦撤去
+- **テスト**：`tests/v11/`（78）・`tests/lib/`・`tests/screens/`・v1.x component テスト・`tests/staircase|storage|i18n/ja` を削除。残置は 7 スイート（sanity / theme / calibration / gaborPixels / GaborPatch / ThemeProvider / focusStyle）
+
+### 0.6 ハウスキーピング（S1）
+
+- ルート直下の作業用 `build-*.apk`（66MB）と手動スクショ `*.png`（117 枚）は **git 未追跡**。誤コミット防止のため `.gitignore` に `/build-*.apk` / `/*.apk` / `/*.png` / `/*.jpg` / `/*.jpeg` を追記（**削除はしていない＝ユーザー資産を保持**）。`docs/` 配下の QA スクショ（追跡済み）は対象外で継続追跡。
+
+---
+
+## 0-S2. Sprint 2 — データ層・設定（F-13・F-11・データモデル §6）（2026-05-30）
+
+### S2.1 結論
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npm test`（Jest） | **緑（全 PASS）** | **13 スイート / 100 件 PASS**（S1=46 → +54）。新規：`tests/state/*`（repository 11 / migration 12 / settings 12 / dataReset 4 ＝ 39）+ `tests/components/v2/settingsControls`（8）+ `tests/screens/v2/SettingsScreen`（7） |
+| `npx tsc --noEmit` | **エラー 0** | strict |
+| `npm run build:web` | **PASS** | `AppEntry-*.js` ≈ 393 kB（App.tsx が起動マイグレーション + SettingsScreen を含む） |
+| Expo SDK | 54 系維持 | — |
+
+### S2.2 追加したデータ層（`src/state/`、`gaboreye:v2:*` 名前空間）
+
+| ファイル | 役割 |
+|---|---|
+| `schema.ts` | §6 全型（UserProfile/Settings/RoundRecord/SessionRecord/DailyStats/Streak/PlayStats/BadgeStatus）+ 列挙 + パラメータ可動範囲 `PARAM_SPECS`（system §9.1）+ 既定値ファクトリ。漸進難化用の任意フィールド（`progressiveModeEnabled`/`progressionState`）を Settings に残置（§6.2） |
+| `keys.ts` | `gaboreye:v2:*` キー定義（§6.10） |
+| `store.ts` | AsyncStorage 低レベル JSON 読み書き（破損時フォールバック） |
+| `repository.ts` | 各レコードの型付き load/save（単一 + コレクション） |
+| `migration.ts` | **F-11** 起動時データリセット。旧名前空間（v1/v1.1/v1.2）検出・消去 → v2 初期化。`shouldShowNotice`（消去あり ∧ 未通知）を返す。`acknowledgeResetNotice()` で 1 度だけ化 |
+| `settings.ts` | **F-13** 範囲制約付き setter（`clampToSpec`）+ 採点方式/列挙妥当化 + `updateSettings`（即時永続化） |
+| `dataReset.ts` | **F-13** 全データ削除（v2 全消去 → 既定再初期化。リセット通知フラグは保持し再通知させない） |
+
+### S2.3 追加した UI
+
+| ファイル | 役割（components.md） |
+|---|---|
+| `src/components/v2/Toggle.tsx` | FT-1。ON/OFF + テキスト併記（NF-12） |
+| `src/components/v2/SegmentedControl.tsx` | FT-3。n/視聴距離/ダーク/片眼の択一 |
+| `src/components/v2/Slider.tsx` | FT-2。m/r/a/b。−/＋ステッパ式（依存追加なし・Web Tab/Enter 可）。a/b は難→易ヒント |
+| `src/components/v2/SettingRow.tsx` | SR-1（56pt 以上）+ グループ見出し |
+| `src/components/v2/ConfirmDialog.tsx` | DG-1。全データ削除 2 段階目 |
+| `src/components/v2/DataResetNotice.tsx` | RZ-1。F-11 通知（OK 64pt） |
+| `src/screens/v2/SettingsScreen.tsx` | F-13 設定タブ本体（S2-1）。n/m/r/a/b・採点方式①②③・視聴距離・ダーク・音/振動・片眼・免責入口・全データ削除・バージョン/同意日時 |
+
+### S2.4 起動フロー（暫定、App.tsx）
+
+1. `runStartupMigration()` で旧データ消去 + v2 初期化
+2. `loadSettings()` の `darkMode` を `ThemeProvider` に反映
+3. `shouldShowNotice` なら `DataResetNotice` を 1 度だけ表示（OK → `acknowledgeResetNotice()`）
+4. `SettingsScreen` を単体表示（**ボトムタブ統合は S5**）
+
+> 視聴距離は `UserProfile`、その他は `Settings` に保存（各変更で即時保存・F-13）。
+
+---
+
+## 0-S3. Sprint 3 — ゲームコア：変化検出ロジック（F-01・F-02・F-04）（2026-05-30）
+
+### S3.1 結論
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npm test`（Jest） | **緑（全 PASS）** | **19 スイート / 180 件 PASS**（S2=100 → **+80**）。新規：`tests/lib/v2/*`（rng 10 / patch 13 / roundGen 19 / scoring 24 / gameMachine 21 ＝ 87）+ `tests/state/sessionRecorder`（7） |
+| `npx tsc --noEmit` | **エラー 0** | strict |
+| `npm run build:web` | **PASS** | `AppEntry-*.js` ≈ 393 kB（S3 は純ロジックで App.tsx 未配線のためサイズ据置。ゲーム画面への配線は S4） |
+| Expo SDK | 54 系維持 | — |
+
+### S3.2 範囲（ロジック層に集中）
+
+S3 は**描画に依存しない純関数 + reducer**のみ。ガボール実描画・回転/周波数アニメ・✅/❌ オーバーレイの見た目・m 秒カウントダウン UI は **S4**。
+
+### S3.3 追加したロジック層（`src/lib/v2/`）
+
+| ファイル | 役割 |
+|---|---|
+| `rng.ts` | 注入可能 PRNG（mulberry32）。`Rng = () => number` を外部注入してテスト決定論を確保。本番は `Math.random` |
+| `patch.ts` | `PatchDef` 型 + 時刻 t の `patchOrientationAt(t)` / `patchCpdAt(t)`（**S4 描画入力**）。CW/CCW・増/減・0–180 正規化・cpd 物理下限 |
+| `roundGen.ts` | n×n 格子生成。個数 1〜floor(n²/3)・0なし・少なめ寄り（調和減衰）、種類割当（回転40/周波数40/両方20）、回転/周波数方向独立ランダム、静止/変化の初期角度等分・初期 cpd 2.0–4.0 |
+| `scoring.ts` | `scoreRound`（TP/FP/FN・TP−FP）/ `isAllCorrect`（方式③）/ `computeSessionScore`（0〜100、FP_PENALTY=50）/ `toRoundRecord` |
+| `gameMachine.ts` | `initGame` / `gameReducer(state, event, rng)`。3 採点方式の状態機械・ラウンド→セッション進行・スコア確定 |
+
+### S3.4 追加した状態層（`src/state/`）
+
+| ファイル | 役割 |
+|---|---|
+| `sessionRecorder.ts` | 完了セッションを `SessionRecord`（§6.4）へ組み立て・S2 repository で永続化。`paramsSnapshot` 記録。中断（completedAt=null）は受け取らない（F-07） |
+
+### S3.5 採点 3 方式の動作（reducer イベント）
+
+- **方式①auto-no-confirm**：`TIMEOUT` のみで採点。`CONFIRM` は無視。
+- **方式②auto-confirm**：`TIMEOUT` または `CONFIRM` で採点。
+- **方式③all-correct-advance**：`TOGGLE` で全問正解（FP=0∧FN=0∧変化>0）になった瞬間に即採点（`advancedByAllCorrect=true`）。または `TIMEOUT` で強制採点。`CONFIRM` 無視。
+- 全方式共通：未選択のまま `TIMEOUT` でも採点（TP=0/FP=0）。`revealed` 中の `TOGGLE` は無効（採点後の選択変更防止）。
+
+### S3.6 S4 への申し送り
+
+- m 秒タイマー駆動・経過秒 t の供給・`patchOrientationAt(t)`/`patchCpdAt(t)` 消費は **S4**。reducer は時刻非依存で `TIMEOUT` を受けるだけ。
+- 静止角度マージンは「達成可能な最大の最小ギャップ（完全等分）」で実装（n≥4 では 12° を全ペアで満たせないため）。詳細は `docs/sprints/sprint-3-self-review.md` §4-1。
+- `sessionId`/`startedAt`/`completedAt` は呼び出し側（S4/S6）が uuid + 現在時刻で供給。
+- 日次集計・ストリーク・バッジ・音/ハプティクスは S7/S8/S9（S3 では未着手）。
+
+---
+
+## 0-S4. Sprint 4 — ゲーム描画・結果開示 UI（F-01 描画・F-03・F-12）（2026-05-31）
+
+### S4.1 結論
+
+| 項目 | 状態 |
+|---|---|
+| `npm test`（Jest） | **緑（全 PASS）**：24 スイート / **240 件**（S3=180 → +60） |
+| `npx tsc --noEmit` | **エラー 0** |
+| `npm run build:web` | **PASS**（web bundle ≈ 394 kB） |
+| Expo SDK | 54 系維持。**native 依存追加なし**（Skia 等を入れていない） |
+
+### S4.2 新規ファイル
+
+ロジック（1）：
+- `src/lib/v2/gameView.ts`（カウントダウン色段階 / aria-live / 結果マーク分類 / 総合判定 / cpd 量子化）
+
+UI コンポーネント（7）：
+- `src/components/v2/CountdownTimer.tsx`（CD-1 / F-12）
+- `src/components/v2/GameTopBar.tsx`（GB-1）
+- `src/components/v2/GaborPatchCell.tsx`（GG-2、既存 `GaborPatch` をラップ）
+- `src/components/v2/GaborGrid.tsx`（GG-1、レイアウト算出を純関数 export）
+- `src/components/v2/ResultMark.tsx`（OV-2）
+- `src/components/v2/AggregateResultBadge.tsx`（OV-3）
+- `src/components/v2/ResultOverlayLayer.tsx`（OV-1）
+- `src/components/v2/ConfirmButton.tsx`（BN-1 / 方式②）
+
+配線（2）：
+- `src/hooks/v2/useGameTimer.ts`（rAF 経過秒駆動 + 残り秒 + TIMEOUT 発火、setInterval フォールバック）
+- `src/screens/v2/GameScreen.tsx`（gameMachine + タイマー + 描画 + 開示を配線。`onAbort`/`onSessionComplete` 委譲）
+
+テスト（5）：
+- `tests/lib/v2/gameView.test.ts`
+- `tests/hooks/v2/useGameTimer.test.tsx`
+- `tests/components/v2/gameComponents.test.tsx`
+- `tests/components/v2/ResultOverlayLayer.test.tsx`
+- `tests/screens/v2/GameScreen.test.tsx`
+
+ドキュメント（1）：
+- `docs/sprints/sprint-4-self-review.md`（v2.0 で上書き）
+
+### S4.3 更新ファイル
+
+- `src/theme/tokens.ts`（`countdownV2` / `resultV2` / `selectionV2` トークン追加、system §1.4）
+- `src/i18n/ja.ts`（`game.*` / `result.*` キー追加）
+
+### S4.4 描画戦略（S1 申し送りへの回答）
+
+- **回転（a deg/sec）**：`GaborPatch` の transform 回転（BMP 再計算ゼロ）。t から `patchOrientationAt(t)` を渡すのみ。
+- **空間周波数（b hz/sec）**：`quantizeCpd(step=0.25)` で cpd を量子化し、`GaborPatch` の useMemo が刻みを
+  またいだときだけ BMP 再生成（スロットリング）。最速 b=0.40 でも約 0.6 秒に 1 回。
+- **Expo Go 互換維持**：既存 BMP→`<Image>` + transform + cpd スロットルのみ。NF-1（30fps 最低許容）達成可能と判断。
+
+### S4.5 GameScreen の使い方（S5/S6 接続用）
+
+```tsx
+<GameScreen
+  config={{ gridSize, roundSeconds, roundCount, rotationSpeed, sfChangeSpeed, scoringMode }}
+  viewingDistanceCm={40}
+  onAbort={() => {/* S5：中断確認ダイアログ */}}
+  onSessionComplete={(state) => {/* S6：セッション結果カード + sessionRecorder で永続化 */}}
+/>
+```
+
+- 開示遷移：方式①② = `REVEAL_INTERVAL_MS`(1500ms)、方式③全問正解即遷移 = `ALL_CORRECT_FEEDBACK_MS`(600ms)。
+- 中断ダイアログ・タブバー・セッション記録は S5/S6 で接続（本スプリントはコールバック委譲のみ）。
+
+### S4.6 S5/S6 への申し送り
+
+- GameScreen はまだ `App.tsx` から到達不可（S5 タブナビ・S6 起動フローで接続）。**実描画スクリーンショット確認は接続後に推奨**。
+- `onSessionComplete(state)` の `state.roundScores` を `src/state/sessionRecorder.ts` の `persistCompletedSession` に渡して永続化（S6）。
+- 音/ハプティクス（ティック・正解/不正解音）は S9 で接続。本スプリントは無音。
+
+---
+
+## 0-S6. Sprint 6 — ホームタブ・起動フロー・免責（F-08・F-06・F-10）（2026-05-31）
+
+### S6.1 結論
+
+| 項目 | 状態 |
+|---|---|
+| `npm test`（Jest） | **緑（全 PASS）**：33 スイート / **297 件**（S5=256 → +41） |
+| `npx tsc --noEmit` | **エラー 0** |
+| `npm run build:web` | **PASS**（web bundle ≈ 588 kB） |
+| Expo SDK | 54 系維持。**native 依存追加なし** |
+
+### S6.2 起動フローと体験（F-06/F-08）
+
+```
+起動 → F-11 マイグレーション（S2）→ プロフィール読込
+  → 初回（onboardingCompleted=false）：オンボーディング 4 ステップ（S6-1）
+  → 距離リマインド（S6-2、3 秒カウントダウン自動進行）
+  → ホームで自動開始（GameScreen / S4）
+  → r ラウンド完了 → セッション結果カード（RC-1 / S6-3）
+  → 「もう一度」→ 距離リマインドへ戻り再プレイ（回数制限なし）
+2 回目以降：起動 → 距離リマインド → 自動開始（オンボなし）
+```
+- クールダウン画面は無し（廃止、F-06）。
+- ホームタブは 3 フェーズ：`distance`（距離リマインド）/ `playing`（ゲーム）/ `result`（結果カード）。
+  `distance`・`result` は非進行＝タブ自由遷移、`playing` のみ中断ダイアログ対象（F-05/F-07）。
+
+### S6.3 新規ファイル
+
+ロジック（2）：
+- `src/lib/v2/dateUtil.ts`（端末ローカル日付 YYYY-MM-DD / 日数差。日付注入でテスト可能、AS-20）
+- `src/lib/v2/statsAggregation.ts`（DailyStats max / Streak 連続日数 / PlayStats 累計の純関数）
+
+データ配線（1）：
+- `src/state/statsRecorder.ts`（完了セッション永続化 + 日次/ストリーク/累計更新の I/O 束ね）
+
+UI コンポーネント（2）：
+- `src/components/v2/DisclaimerPanel.tsx`（DC-1 / F-10。オンボ初回と設定再閲覧で共用）
+- `src/components/v2/SessionResultCard.tsx`（RC-1 / F-08・F-04）
+
+画面（2）：
+- `src/screens/v2/OnboardingScreen.tsx`（ON-1 / S6-1。4 ステップ・合計タップ ≤6）
+- `src/screens/v2/DistanceReminderScreen.tsx`（DR-1 / S6-2。CountdownTimer large 自動進行）
+
+テスト（6）：
+- `tests/lib/v2/dateUtil.test.ts`
+- `tests/lib/v2/statsAggregation.test.ts`
+- `tests/state/statsRecorder.test.ts`
+- `tests/screens/v2/OnboardingScreen.test.tsx`
+- `tests/screens/v2/DistanceReminderScreen.test.tsx`
+- `tests/components/v2/SessionResultCard.test.tsx`
+- `tests/screens/v2/startupFlow.test.tsx`（起動フロー統合）
+
+ドキュメント（1）：
+- `docs/sprints/sprint-6-self-review.md`（v2.0 で上書き）
+
+### S6.4 更新ファイル
+
+- `src/screens/v2/AppRoot.tsx`（ホーム 3 フェーズ化・距離リマインド/結果カード配線・完了時の永続化+集計配線。`initiallyPlaying` を `initialHomePhase` に置換）
+- `App.tsx`（オンボーディングゲート・UserProfile 保存・免責再閲覧モーダル追加）
+- `src/i18n/ja.ts`（`onboarding.*` / `disclaimer.*` / `distance.*` / `home.result_*`・`replay`・`streak_*` キー追加）
+- `tests/screens/v2/AppRoot.test.tsx`（S5 から起動フロー対応に更新）
+
+### S6.5 撤去ファイル
+
+- `src/screens/v2/HomeWaitingScreen.tsx`（S5 暫定の手動開始 CTA。S6 の自動開始フローに置換され不要化）
+
+### S6.6 S7/S8 への申し送り
+
+- **S7 履歴**：`statsRecorder` が更新する DailyStats（max・件数）/ Streak（連続日数）/ PlayStats（累計）を集計元にする。日次スコア折れ線・連続日数・累計プレイ回数。
+- **S8 バッジ**：完了時のバッジ判定は本スプリント未配線。`recordCompletedSession` の戻り値（session/streak/dailyStats/playStats）を判定入力にできる。バッジ獲得演出は `SessionResultCard` 上に重畳（点滅なし、設計済みの空き領域あり）。
+- **S9 音/ハプティクス**：距離リマインドのティック・セッション完了音は未配線。`CountdownTimer` / 完了 effect に接続予定。
+
+---
+
+## 0-S7. Sprint 7 — 履歴タブ・進捗グラフ（F-09 グラフ部・DailyStats/Streak/PlayStats 集計）（2026-05-31）
+
+### S7.1 結論
+
+| 項目 | 状態 |
+|---|---|
+| `npm test`（Jest） | **緑（全 PASS）**：38 スイート / **341 件**（S6=297 → +44） |
+| `npx tsc --noEmit` | **エラー 0** |
+| `npm run build:web` | **PASS**（web bundle ≈ 601 kB） |
+| Expo SDK | 54 系維持。**native 依存追加なし**（react-native-svg を採用せず View ベースで折れ線描画） |
+
+### S7.2 体験（F-09 グラフ部）
+
+履歴タブ（`HistoryScreen`、`HistoryPlaceholderScreen` を置換）が表示する：
+- **日次スコア折れ線**：永続化済み `DailyStats.bestSessionScore`（§6.5 で同日 max 確定済み）を
+  日付昇順・直近 30 日窓でプロット。当日点は赤 + ◆ 形で強調（他日は青 + ● 円。色 + 形で非依存、NF-12）。
+- **連続日数**（`Streak.currentStreak`、🔥 + 数値 48px）/ **累計プレイ回数**（`PlayStats.totalSessions`）を StatTile ×2。
+- **データ 7 日未満**は「もう少しデータが集まると傾向が見えます」案内（EmptyState）。StatTile は 0 でも実値表示。
+- **完全初期（0 セッション）**：空グラフ（代替テキスト「まだ日次スコアのデータがありません」）+ 連続 0 日 / 累計 0 回 + 案内。
+- バッジ領域は **S8 用のプレースホルダ**（見出し「バッジ」+ プレースホルダカード）で場所だけ確保。
+
+### S7.3 グラフ描画手段の選択理由（Expo Go / SDK 54 互換）
+
+- `react-native-svg` は **未インストール**（native モジュール）。Expo Go / SDK 54 互換を確実に保つため**採用しない**。
+- 折れ線は **View ベース**で描画：座標計算を純関数 `lib/v2/chartGeometry.ts`（Y 軸 0〜100 マッピング・X 軸等間隔・
+  線分の長さ/角度）に分離し、`LineChart` は絶対配置 View（点）+ `rotateZ` + `transformOrigin:'left center'`（線分）で描く。
+- 描画アニメーションなし（静的描画）＝ reduced-motion を自然に満たす（NF-13）。点滅なし（NF-11）。
+- `transformOrigin` は RN 0.74+（本プロジェクト 0.81）でサポート。`npm run build:web` で検証済み。
+
+### S7.4 新規ファイル
+
+ロジック（2）：
+- `src/lib/v2/historyView.ts`（DailyStats → 折れ線系列。直近 N 日窓・当日強調・データ少時閾値。today 注入でテスト可能）
+- `src/lib/v2/chartGeometry.ts`（折れ線の座標計算。SVG 非依存・View 描画の土台）
+
+UI コンポーネント（3）：
+- `src/components/v2/LineChart.tsx`（CH-1 / F-09。View ベース折れ線・軸ラベル 24px・当日 ◆ 強調・aria 要約）
+- `src/components/v2/StatTile.tsx`（ST-1 / F-09。連続日数 🔥 / 累計回数の数値タイル）
+- `src/components/v2/EmptyState.tsx`（EM-1 / F-09。データ少時案内）
+
+画面（1）：
+- `src/screens/v2/HistoryScreen.tsx`（S7-1。`HistoryPlaceholderScreen` を置換。now 注入で日付決定論）
+
+テスト（5）：
+- `tests/lib/v2/historyView.test.ts`（19 件：系列変換・同日 max・窓・当日強調・閾値・要約）
+- `tests/lib/v2/chartGeometry.test.ts`（10 件：Y/X マッピング・線分・当日フラグ）
+- `tests/components/v2/StatTile.test.tsx`（3 件）
+- `tests/components/v2/LineChart.test.tsx`（6 件：要約・空・軸・当日点）
+- `tests/screens/v2/HistoryScreen.test.tsx`（8 件：グラフ要約・StatTile・閾値・初期・バッジ枠）
+
+### S7.5 更新ファイル
+
+- `src/screens/v2/AppRoot.tsx`（history タブを `HistoryScreen` に差し替え、`now` を伝播）
+- `src/i18n/ja.ts`（`history.*` 本実装キー・`common.loading`/`common.load_error` 追加）
+- `src/theme/tokens.ts`（`Colors` に `streakFlameFg`/`streakFlameBg` を公開＝StatTile 炎色。トークン定義値の追加なし）
+
+### S7.6 申し送り
+
+- **S8 バッジ**：`HistoryScreen` のバッジ見出し下プレースホルダ（`*-badges-placeholder`）を本実装（BadgeCell 一覧）に置換する。
+- グラフは ScrollView 内の最初の領域。バッジ一覧はその下に続く想定（screens.md S7-1）。
+- `color.score.line` = `actionPrimary`、`color.score.point.today` = `semanticError`（既存トークンを利用、新規色なし）。
+
+---
+
+## 0-S8. Sprint 8 — バッジ（F-09 バッジ部・§5 3 軸 11 バッジ・BadgeStatus）（2026-05-31）
+
+### S8.1 結論
+
+| 項目 | 状態 |
+|---|---|
+| `npm test`（Jest） | **緑（全 PASS）**：43 スイート / **402 件**（S7=341 → +61） |
+| `npx tsc --noEmit` | **エラー 0** |
+| `npm run build:web` | **PASS**（web bundle ≈ 614 kB） |
+| Expo SDK | 54 系維持。**native 依存追加なし**。スキーマ（§6.8 BadgeStatus）変更なし（既存定義を使用） |
+
+### S8.2 体験（F-09 バッジ部 / §5.4）
+
+- セッション完了時に **3 軸 11 バッジ**（継続日数 B-01〜05 / 高難度 B-06〜08 / 高スコア B-09〜11）の付与判定が走る。
+- **履歴タブ**のバッジ見出し下に全 11 バッジを 2 列（広幅 3 列）グリッドで一覧表示。
+  - 獲得＝🏅 フルカラー枠 + 名称 + 獲得日、未獲得＝🔒（形で区別、NF-12）+ 名称 + 条件ヒント。
+  - セルタップで条件全文を展開／折りたたみ。
+  - B-11 のヒントは「スコア 80 以上をあと {n} 回で獲得」を残り回数で動的展開。
+- **獲得演出**：セッション結果カード上層に `BadgeAwardToast` を中央上に重畳。拡大 + フェードのみ（点滅なし NF-11、
+  reduced-motion 時は静的表示）。複数同時獲得は 1 トーストに名称列挙（合計時間が伸びない）。`aria-live` で読み上げ。
+  「もう一度」操作を妨げない（`pointerEvents: none`）。新セッション開始時に演出をリセット（1 度だけ）。
+
+### S8.3 判定ロジック（純関数・テスト可能）
+
+- 高難度閾値（screens.md S8 / system §9.2）：**a ≤ 3 °/sec を「遅い」、b ≤ 0.10 hz/sec を「小さい」**。
+  - B-06：a ≤ 3 かつセッション全問正答（全ラウンドで FN=0 & FP=0、変化パッチ ≥ 1）。
+  - B-07：b ≤ 0.10 かつ全問正答。
+  - B-08：a ≤ 3 かつ b ≤ 0.10 かつ sessionScore ≥ 80（高スコア。全問正答は不要）。
+- 高スコア：B-09 score ≥ 80 / B-10 score = 100 / B-11 score ≥ 80 を累計 5 セッション。
+- 継続：B-01 連続 1（初回完了）/ B-02 3 / B-03 7 / B-04 14 / B-05 30 日（>= 判定）。
+- 連続日数・高スコア累計は `BadgeContext` で**注入**（日付依存をテスト決定論化）。
+  既獲得は `earnedAt` を保持し**二重獲得しない**。
+
+### S8.4 配線（完了時）
+
+- `recordCompletedSession`（`statsRecorder`）が SessionRecord 永続化 + Streak 更新の**後**に
+  `recordBadgesForSession`（`badgeRecorder`）を呼ぶ。戻り値に `badges` / `newlyEarnedBadges` を追加。
+- B-11 の高スコア累計は**永続済み全セッション**（完了済み・score ≥ 80）から算出（`countHighScoreSessions`）。
+  今回セッションは既に永続化済みのため累計に含まれる。
+- `AppRoot.handleSessionComplete` が `newlyEarnedBadges` を `SessionResultCard` へ渡す。
+
+### S8.5 S9（音・ハプティクス）への接続点
+
+- `BadgeAwardToast` は表示開始時に `onShown(badgeIds)` を **1 度だけ**呼ぶ（音/ハプティクスは発火しない＝責務分離）。
+- `SessionResultCard` は `onBadgeShown` プロップで上位へ中継。S9 はここに badge.mp3 + heavy/medium ハプティクスを配線する。
+
+### S8.6 新規ファイル
+
+ロジック（3）：
+- `src/lib/v2/badgeDefinitions.ts`（B-01〜11 定義・閾値定数・id 索引）
+- `src/lib/v2/badges.ts`（`evaluateBadges` / `meetsBadgeCondition` / `isSessionPerfectClear` / `remainingForStableHighScore`）
+- `src/lib/v2/badgeView.ts`（一覧表示モデル `buildBadgeRows`・獲得日整形・B-11 残り回数展開・`earnedCount`・`resolveBadgeNames`）
+
+永続化配線（1）：
+- `src/state/badgeRecorder.ts`（`recordBadgesForSession` / `countHighScoreSessions`。repository の load/save を使用）
+
+UI コンポーネント（3）：
+- `src/components/v2/BadgeCell.tsx`（BG-1。獲得/未獲得 + 鍵アイコン + ヒント + 展開）
+- `src/components/v2/BadgeGrid.tsx`（一覧グリッド・レスポンシブ 2/3 列・role=list）
+- `src/components/v2/BadgeAwardToast.tsx`（BG-2。拡大+フェード・点滅なし・reduced-motion 静的・aria-live・onShown）
+
+テスト（5 新規 + 既存 2 拡張）：
+- `tests/lib/v2/badges.test.ts`（31 件：各バッジ境界・全問正答・二重獲得しない・複数同時・B-11 累計）
+- `tests/lib/v2/badgeView.test.ts`（11 件：行整形・獲得日・B-11 残り回数・earnedCount・名称解決）
+- `tests/state/badgeRecorder.test.ts`（10 件：完了配線・付与/保存・二重獲得しない・B-11 5 回目・高スコア累計集計）
+- `tests/components/v2/BadgeCell.test.tsx`（7 件：獲得/未獲得表示・aria・展開）
+- `tests/components/v2/BadgeAwardToast.test.tsx`（5 件：名称表示・複数列挙・空非表示・onShown 1 度）
+- `tests/components/v2/SessionResultCard.test.tsx`（+3：演出重畳・空非表示・onBadgeShown 1 度）
+- `tests/screens/v2/HistoryScreen.test.tsx`（+2：全 11 セル表示・初期全未獲得）
+
+### S8.7 更新ファイル
+
+- `src/state/schema.ts` — **変更なし**（BadgeId / BadgeStatus / defaultBadgeStatus は既存）。
+- `src/state/repository.ts` — **変更なし**（badge load/save は既存）。
+- `src/state/statsRecorder.ts`（`CompletedSessionResult` に `badges`/`newlyEarnedBadges` 追加・バッジ配線）
+- `src/screens/v2/AppRoot.tsx`（`newlyEarnedBadges` 状態・結果カードへ伝播・新セッションでリセット）
+- `src/components/v2/SessionResultCard.tsx`（`newlyEarnedBadges`/`onBadgeShown` プロップ・`BadgeAwardToast` 重畳）
+- `src/screens/v2/HistoryScreen.tsx`（プレースホルダを `BadgeGrid` に置換・バッジ/全セッション読み込み）
+- `src/i18n/ja.ts`（`badge.*` キー・`history.badges_empty` 追加）
+
+### S8.8 受け入れ基準マッピング（§5.4 / F-09 バッジ部）
+
+| 基準 | 対応 |
+|---|---|
+| 各バッジ獲得条件を満たすと付与 | `evaluateBadges`（badges.test.ts 全境界） |
+| 獲得時に短時間・点滅なしの演出を結果で 1 度 | `BadgeAwardToast`（拡大+フェード・reduced-motion 静的・AppRoot で 1 度リセット） |
+| 履歴一覧で獲得/未獲得確認・未獲得にヒント | `BadgeGrid`/`BadgeCell`（HistoryScreen.test.tsx） |
+| 獲得時に音+ハプティクス（個別 OFF 可・S9） | `onShown`/`onBadgeShown` 発火点を用意（実発火は S9） |
+| 旧バッジ（ゲーム依存）は存在しない | 定義は §5 の 11 種のみ。旧バッジ参照なし |
+
+### S8.9 既知の懸念・申し送り
+
+- **音/ハプティクスは未発火**：S8 は接続点（`onShown`/`onBadgeShown`）のみ。S9 で badge.mp3 + heavy/medium を配線。
+- 視覚確認は RNTL（react-native-web レンダリング）+ `npm run build:web` で担保。Playwright スクリーンショットは
+  本スプリントでは未取得（MCP 起動はオーケストレーター側で実行可能）。実機/Web の見た目最終確認は S10 仕上げで推奨。
+- 未獲得セルのグレースケール表現は `opacity: 0.85` + 🔒 + ヒントテキスト（色のみ非依存、NF-12 充足）。
+  もし視覚コントラストが弱い場合は S10 で彩度低減を強める余地あり（判定・a11y には影響しない）。
+
+---
+
+## 0-S9. Sprint 9 — 音・ハプティクス（F-14・NF-31〜33）（2026-05-31）
+
+### S9.1 結論
+
+| 項目 | 状態 |
+|---|---|
+| `npx tsc --noEmit` | **エラー 0** |
+| `npm test`（Jest） | **緑：48 スイート / 439 件 PASS**（S8 後 402 → +37 件） |
+| `npm run build:web` | **PASS**（AppEntry ≈ 671 kB。assets に audio 5 件がバンドル） |
+| Expo SDK | 54 系維持（expo-audio ~1.1.1 / expo-haptics ~15.0.8） |
+
+### S9.2 アーキテクチャ（3 層分離）
+
+1. **プラットフォーム抽象（副作用層）**
+   - `src/platform/audio.ts`：`AudioBackend`（`prime`/`play(kind,volume)`/`stop`/`isAvailable`）。
+     Web=Web Audio API の OscillatorNode で 5 音種を合成（音源ファイル不要）。Native=expo-audio で
+     `assets/audio/<kind>.mp3` を 5 プレイヤーで再生。`getDefaultAudioBackend()`（Platform 分岐・キャッシュ）/
+     `setDefaultAudioBackend()`（テスト差し替え）。
+   - `src/platform/haptics.ts`：`HapticsBackend`（`trigger(kind)`/`isAvailable`）。Native=expo-haptics
+     `impactAsync`（light/medium、badge=heavy→medium の 2 連）。Web=Noop。同じく get/set Default。
+2. **決定（純関数）**：`src/lib/v2/feedback.ts` の `decideFeedback(event, settings, silent)` が
+   「イベント × soundEnabled × hapticsEnabled × サイレント」→ 鳴らす音種・音量・振動種を返す。副作用なし。
+3. **配線（コントローラ）**：`src/hooks/v2/useFeedback.ts` が決定と再生を橋渡し（`emit(event)`）。
+   初回マウントで `audio.prime()`。AppRoot が 1 インスタンスを保持し GameScreen / 結果カードへ配る。
+
+### S9.3 発火点（system §10.1 / screens.md S9）
+
+| イベント | 配線箇所 | 音 | ハプティクス |
+|---|---|---|---|
+| ラウンド正解（総合 ✅） | `GameScreen` 開示 effect（`aggregateKind`） | correct 60% | light |
+| ラウンド不正解（総合 ❌） | 同上 | wrong 60% | medium |
+| カウントダウン残り 3/2/1 秒 | `GameScreen` playing 中の remainingSec 監視（各秒 1 度） | tick 40/50/60% | なし |
+| セッション完了 | `AppRoot.handleSessionComplete` | end 50% | なし |
+| バッジ獲得 | `AppRoot.handleBadgeShown`（`SessionResultCard.onBadgeShown` 経由） | badge 70% | badge（heavy+medium） |
+
+### S9.4 サイレントモード尊重（NF-33）
+
+- iOS：`setAudioModeAsync({ playsInSilentMode: false })` により**サイレントスイッチ時は OS が音を抑止**。
+  ハプティクスは OS サイレントの影響を受けず発火継続。Android は OS の着信音量に従う。
+- `decideFeedback` も `silent` 引数で「音抑止・ハプティクス継続」を表現でき、テストで明示検証。
+  実行時は OS の audio session に委ねるため `useFeedback` は `silent=false` を渡す。
+
+### S9.5 実機（Expo Go）確認推奨項目
+
+自動テストは「正しい kind で backend が叩かれる／OFF 時に叩かれない／試行中は採点 FB 以外を出さない」まで
+配線検証済み。**実音・実振動の体感は実機でのみ確認可能**：
+
+1. 正解 / 不正解で correct.mp3 / wrong.mp3 + light/medium 振動
+2. カウントダウン残り 3-2-1 秒で tick.mp3（音量漸増、danger 赤転換と同期）
+3. セッション完了で end.mp3
+4. 初回完了など獲得時に badge.mp3 + heavy→medium 連続振動
+5. iOS サイレントスイッチ ON：音なし・ハプティクスあり（NF-33）
+6. 設定の音 OFF / 振動 OFF を個別に切替えて当該チャネルのみ無発火になること
+7. NF-31 レイテンシ：タップ → 音まで体感遅延が無いこと（prime 済みのため 1 発目も実用範囲想定）
+
+### S9.6 新規ファイル
+
+- `src/platform/audio.ts`（効果音バックエンド）
+- `src/platform/haptics.ts`（触覚バックエンド）
+- `src/lib/v2/feedback.ts`（発火決定の純関数）
+- `src/hooks/v2/useFeedback.ts`（決定 ↔ 再生の配線コントローラ）
+- `tests/lib/v2/feedback.test.ts`（決定純関数 +16）
+- `tests/platform/audio.test.ts`（音 backend +6）
+- `tests/platform/haptics.test.ts`（触覚 backend +6）
+- `tests/screens/v2/GameScreenFeedback.test.tsx`（採点 FB / ティック配線 +6）
+- `tests/screens/v2/AppRootFeedback.test.tsx`（完了音 / バッジ / 個別 OFF +3）
+
+### S9.7 更新ファイル
+
+- `src/screens/v2/GameScreen.tsx`（`onFeedback` prop、開示時の正解/不正解発火、残り 3/2/1 秒ティック）
+- `src/screens/v2/AppRoot.tsx`（`useFeedback` 配備、`onFeedback`/`onBadgeShown` 配線、完了音発火、テスト用 backend prop）
+- `docs/run.md`（本セクション）
+
+### S9.8 既知の懸念・申し送り
+
+- **Web の音は合成音**：音源 mp3 は native 専用。Web は OscillatorNode で「上行 2 音」等を近似する
+  （バンドル増を避けるため）。体感が native と微妙に異なるが、機能要件（鳴る/鳴らない）は満たす。
+- **アセット欠落耐性**：native の `require('../../assets/audio/*.mp3')` は個別 try/catch。欠落・API 失敗でも
+  silent fail しクラッシュしない（NoopAudioBackend / 個別プレイヤー null 保持）。`assets/audio/` に 5 mp3 存在を確認済み。
+- **native API 混入監査（CLAUDE.md §5）**：`document`/`window`/`navigator` の直叩きなし。Web は `globalThis.AudioContext`
+  を Platform=='web' 分岐内でのみ参照。expo-audio/expo-haptics の require は Native 分岐内で lazy。`Image` transform 等の
+  メモ化問題は本スプリント無関係（描画変更なし）。
+- **prime のタイミング**：マウント時に prime するが、Web の自動再生制限は厳密にはユーザージェスチャ内 prime が理想。
+  起動フロー上ゲーム到達時点で既にタップを経ているため実用上問題ない想定。気になれば S10 で最初のタップ内 prime に移せる。
+
+---
+
+## 0-S10. Sprint 10 — 仕上げ（a11y・レスポンシブ・セーフエリア・全体結合）（2026-05-31）
+
+> **このセクションが v2.0 リリース時点の最終状態**。起動・テスト・ビルド・既知の制約・実機確認事項は §0-S10 を参照。
+> §1 以降（前提環境・EAS ビルド手順 等）は引き続き有効。§4.1 / §5 の旧「現在の状態」記述は歴史的記録（実際の最新は本節）。
+
+### S10.1 結論（v2.0 完成状態）
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npx tsc --noEmit` | **エラー 0** | strict |
+| `npm test`（Jest） | **緑：52 スイート / 462 件 PASS**（S9=439 → **+23**） | 新規：`tests/a11y/*`（ariaWeb 6 / webAriaComponents 4 / settingRow+SkipLink 6 ＝ 16）+ `tests/integration/s10FullFlow`（7） |
+| `npm run build:web` | **PASS** | `AppEntry-*.js` ≈ 673 kB |
+| Expo SDK | 54 系維持 | native 依存追加なし |
+| version | **2.0.0** | `package.json` / `app.json` / `schema.APP_VERSION` を 2.0.0 に統一。設定タブに「バージョン v2.0.0 + 免責同意日時」表示（F-13） |
+
+### S10.2 a11y 是正（NF-7〜15）
+
+S10 評価で S10 送りにされた a11y Minor 4 点を是正：
+
+| # | 対象 | 是正内容 |
+|---|---|---|
+| 1 | 採点方式ラジオ（設定タブ） | `SettingRow` に `radio`/`checked` を追加し `accessibilityRole="radio"` + `accessibilityState.checked`、Web へ `role="radio"` + `aria-checked` 透過。グループは `radiogroup`。SegmentedControl も `aria-checked` を出すよう補強 |
+| 2 | Toggle（音/振動 ON/OFF） | `accessibilityRole="switch"` に加え Web へ `role="switch"` + `aria-checked` 透過 |
+| 3 | 選択パッチ（GaborPatchCell） | `accessibilityRole="checkbox"` に加え Web へ `role="checkbox"` + `aria-checked` + `aria-disabled` 透過 |
+| 4 | バッジセル（BadgeCell） | `accessibilityRole="button"` に加え Web へ `role="button"` + `aria-expanded` 透過 |
+
+- **是正の要点**：react-native-web 0.21 の `createDOMProps` は `accessibilityState`（checked/expanded/selected）を
+  DOM の `aria-*` へ自動透過**しない**（W3C プロパティ `aria-checked` 等のみ DOM へ写す）。
+  そこで新ヘルパー `src/theme/ariaWeb.ts` の `webAria(role, state, label)` で **Web のときだけ** `role` + `aria-*` を
+  明示スプレッドする方式に統一（Native は `accessibilityRole`/`State` が担うため空 props）。
+  forwardedProps（RNW 本体）に `aria-checked`/`aria-expanded`/`aria-selected`/`aria-pressed`/`role` が含まれることを確認済み。
+- **Skip link（NF-14）**：`src/components/v2/SkipLink.tsx` を新設（Web 専用、Native は `null`）。AppRoot 先頭に配置し
+  `targetId="ge-main-content"` のメインコンテンツへフォーカス移動。通常は画面外退避、focus 時のみ左上に出る
+  （`focusStyle.installFocusVisibleStyle` の大域 CSS に `[data-ge-skip-link]` ルールを追加）。
+- **focus-visible（NF-9）**：S5 で導入済みの 3px ring（offset 2px）を継続（変更なし）。
+- **reduced-motion（NF-13）**：`ResultOverlayLayer` / `BadgeAwardToast` が `AccessibilityInfo.isReduceMotionEnabled()`
+  （RNW で `prefers-reduced-motion` にマップ）で装飾アニメを静的化済み。**ゲーム刺激の回転/周波数変化は抑制対象外**（NF-13 明記どおり）。
+- 点滅なし（NF-11）/ 色のみ非依存（NF-12）は S4〜S8 で担保済み（カウントダウン色+太字、トグル位置+ON/OFF、当日点 ◆、バッジ 🔒）。
+
+### S10.3 レスポンシブ（NF-21/22）
+
+- 全タブ画面（ホーム/履歴/設定）は PC で最大幅中央寄せ、タブバーは全幅・各 48pt 以上。
+- ゲーム格子は `computeGridEdge`（スマホ `min(short-32, 360)` / PC 480）で n=3/4/5 とも破綻なし。
+- ダイアログ/カードは最大幅制約。360/375/1280px で本文 24px・操作要素 48pt 以上を維持。
+
+### S10.4 セーフエリア（NF-29/30）
+
+各画面の `edges` を点検（変更不要だったことを確認）：
+
+| 画面 | 方式 | edges |
+|---|---|---|
+| ゲームプレイ中（S4） | フルスクリーン許容 | 背景 #808080 は全面。X/残り秒は `GameTopBar` が `useSafeAreaInsets` で top inset 内 |
+| ホーム結果/履歴/設定 | セーフエリア準拠 | `['top','left','right']`（bottom はタブバーが inset 担保） |
+| 距離リマインド/オンボ | セーフエリア準拠（タブバーなし全画面） | `['top','left','right','bottom']` |
+| ボトムタブバー | — | `useSafeAreaInsets` で bottom inset パディング |
+| 免責再閲覧モーダル（App.tsx） | — | `['top','bottom']` |
+
+### S10.5 未参照コードの整理
+
+- `src/screens/v2/HistoryPlaceholderScreen.tsx`（S5 仮置き、S7 で `HistoryScreen` に置換済み・どこからも import されず）を削除。
+- `src/state/index.ts`（バレル、どこからも import されず）を削除。
+- `src/theme/index.ts` は `tests/theme.test.ts` が import しているため**残置**。
+- モジュール到達性は App.tsx を起点にした静的解析で確認（残る未到達ファイルは上記 2 件のみだった）。
+
+### S10.6 CLAUDE.md §5 監査（Web 専用 API / Image transform）
+
+- `document`/`window` 直叩きは `SkipLink.tsx`（`Platform.OS!=='web'` で早期 return + `typeof document` ガード）と
+  `focusStyle.ts`（同様の二重ガード）のみ。Native ビルドに混入しない。
+- `Image` transform メモ化：`GaborPatch` は transform を**ラッパ View** に当てる既存方式を維持（Android Fabric で
+  Image 直 transform が更新されない問題の回避、S1〜既存）。本スプリントで描画ロジック変更なし＝回帰なし。
+- 音/ハプティクスの Web/Native 分岐は S9 のまま（変更なし）。
+
+### S10.7 全体結合テスト（新規 `tests/integration/s10FullFlow.test.tsx`）
+
+- 方式②（auto-confirm）：距離リマインド → 自動開始 → 確定ボタン → 開示 → 完了 → 結果カード + 永続化。
+- タブ切替：プレイ中の他タブ選択で中断ダイアログ（キャンセル=継続 / 確定=当該タブ着地・未記録）。idle はダイアログなしで自由遷移。
+- 設定反映：`roundCount=2` で 1 ラウンド確定では完了しない（2 ラウンド必要）ことを確認。
+- Skip link：Web で AppRoot 先頭に `role=link` 描画、Native では非描画。
+- 方式①（auto-no-confirm）と方式③（all-correct-advance）は既存 `startupFlow` / `GameScreen.test` で網羅済み。
+
+### S10.8 新規・更新ファイル
+
+新規（4 src/test）：
+- `src/theme/ariaWeb.ts`（`webAria` ヘルパー、NF-15）
+- `src/components/v2/SkipLink.tsx`（NF-14）
+- `tests/a11y/ariaWeb.test.tsx` / `tests/a11y/webAriaComponents.test.tsx` / `tests/a11y/settingRowRadioAndSkipLink.test.tsx`
+- `tests/integration/s10FullFlow.test.tsx`
+
+更新：
+- `src/components/v2/{Toggle,SegmentedControl,GaborPatchCell,BadgeCell,SettingRow}.tsx`（webAria 配線）
+- `src/screens/v2/{AppRoot,SettingsScreen}.tsx`（SkipLink 配置 / scoring radio に radio+checked / radiogroup 透過）
+- `src/theme/focusStyle.ts`（skip link 用 CSS ルール追加）
+- `src/i18n/ja.ts`（`nav.skip_to_content` 追加）
+- `package.json` / `app.json`（version 2.0.0）
+
+削除：
+- `src/screens/v2/HistoryPlaceholderScreen.tsx` / `src/state/index.ts`
+
+### S10.9 実機（Expo Go）で最終確認したい項目
+
+自動テスト・`build:web` で機能とロジックは緑。**見た目・体感は実機/Web 実機で確認推奨**：
+
+1. **VoiceOver/TalkBack**：トグルが「スイッチ オン/オフ」、採点方式が「ラジオ 選択中/未選択」、パッチが「チェックボックス 選択済み/未選択」、バッジが「展開済み/折りたたみ」と読み上げられること。
+2. **Web キーボード**：Tab 最初でスキップリンク出現 → Enter でメインへジャンプ。全操作要素に Tab 到達・Enter/Space 起動・3px focus ring。
+3. **レスポンシブ**：360/375/1280px で全画面はみ出しゼロ、タップ 48pt 以上（Playwright スクショ推奨）。
+4. **セーフエリア**：ノッチ/Home Indicator 端末でゲーム背景が全面・X/残り秒/タブバーが安全領域内。他画面はコンテンツが inset 内。
+5. **reduced-motion**：OS の「視差効果を減らす」ON で結果開示フェード・バッジ拡大が静的化、**ゲーム刺激の回転/周波数変化は継続**すること。
+6. **ガボール描画品質（NF-26〜28b）**：回転中も四隅に背景露出なし・隙間なし、静止パッチが時間変化しないこと。
+
 ---
 
 ## 1. 前提環境
@@ -93,6 +767,80 @@ npm start
   - `tests/components/Game2Screen.test.tsx`（描画クラッシュなし）
 - typecheck: PASS
 - build:web: PASS（`dist/_expo/static/js/web/AppEntry-*.js` ≈ 349 kB）
+
+### 4.2 EAS ローカルビルド（ネイティブ APK / IPA）
+
+`eas build --local` は Expo クラウドに送らず、手元の Mac でネイティブビルドを完結させる。**iOS / Android どちらも事前ログインなしで実行可能**（プロジェクト ID は `app.json` に同梱）。ただし署名は必要。
+
+#### 4.2.1 環境変数（`~/.zshrc` に登録済み）
+
+```bash
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$PATH"
+```
+
+新規ターミナルなら自動反映。同じセッションで使うなら `source ~/.zshrc`。
+
+#### 4.2.2 必須ツール（インストール済み）
+
+| ツール | 確認コマンド | 備考 |
+|---|---|---|
+| `eas-cli` 18+ | `eas --version` | `npm i -g eas-cli` で導入。asdf 環境では `asdf reshim nodejs` 必須 |
+| JDK 17 | `java -version` | Android Studio 同梱の JBR を使用 |
+| Android SDK | `adb --version` / `ls $ANDROID_HOME` | build-tools 36.0.0 / platforms android-36 / NDK 26.1 / cmdline-tools/latest |
+| Xcode 15+ | `xcodebuild -version` | iOS ローカルビルド用 |
+| CocoaPods | `pod --version` | iOS の `pod install` で使用 |
+| fastlane | `fastlane --version` | iOS の署名・配布で使用 |
+
+#### 4.2.3 Android ローカルビルド（preview / APK）
+
+```bash
+cd /Users/np_202212_11/projects/gabor3
+eas build --platform android --profile preview --local
+```
+
+- 初回はプロジェクトのプリビルド（`android/` 生成）→ Gradle 依存解決で数百 MB ダウンロード、所要 5〜15 分。
+- 完了するとカレントディレクトリに `build-<timestamp>.apk` が出力される。
+- 実機転送：`adb install build-*.apk`（USB デバッグを有効化した端末を接続）。
+- 署名鍵が無い場合、初回のみ EAS が `credentials.json` を作るかリモート保存するか聞く。完全オフラインで進めたいなら事前に `eas credentials` でローカル keystore を生成しておく。
+
+> **NDK バージョン注意**：RN 0.81 は NDK 27.x を要求するケースがある。Gradle が `Compatible side by side NDK version was not found` で失敗したら、Android Studio の **SDK Manager → SDK Tools → NDK (Side by side)** で 27.1.12297006 を追加。
+
+#### 4.2.4 iOS ローカルビルド（preview）
+
+```bash
+cd /Users/np_202212_11/projects/gabor3
+eas build --platform ios --profile preview --local
+```
+
+- シミュレータ向けに `.tar.gz`（解凍で `.app`）を出すには eas.json の `preview.ios.simulator: true` が必要（現状未設定 → 4.2.5 参照）。
+- 実機向けは Apple Developer 登録 + プロビジョニングプロファイルが必要。最初の起動時に対話で設定するか `credentials.json` を用意する。
+
+#### 4.2.5 シミュレータ向け iOS ビルドを使うなら
+
+`eas.json` に下記プロファイルを追加（任意）：
+
+```json
+"preview-ios-sim": {
+  "extends": "preview",
+  "ios": { "simulator": true }
+}
+```
+
+実行：
+
+```bash
+eas build --platform ios --profile preview-ios-sim --local
+# 出力: build-*.tar.gz → 解凍して .app をシミュレータにドラッグ
+```
+
+#### 4.2.6 既知の落とし穴
+
+- **asdf shim 未更新**：`npm i -g eas-cli` の直後は `eas` が PATH に出ない。`asdf reshim nodejs` で解消。
+- **EAS ログイン**：`eas build --local` 自体はログイン不要だが、`credentials.json` を使わない場合は最初の Android 署名鍵生成で `eas login` を促される。CLAUDE.md にあるとおり stdin 経由のログインは失敗するので、**ユーザー自身がインタラクティブに `eas login` を実行**する。
+- **`ios/` `android/` ディレクトリ**：`.gitignore` で除外済み。`eas build --local` が毎回プリビルドで作り直すため、コミットしない。
 
 ---
 
@@ -201,6 +949,10 @@ gabor3/
 | Sprint 6 | 2026-04-29 | ストリーク（0:00 跨ぎ判定）、達成バッジ B-01〜B-08、バッジ一覧／詳細モーダル、日次ベスト画面、StreakBadge / AchievementBadge / BadgeDetailModal、SessionComplete でバッジ獲得 1.5 秒演出、V1ScoreChart 軸ラベル幅・X 軸密度修正 | 242 |
 | Sprint 7-A | 2026-04-29 | 設定画面（screens.md S7-01）、ThemeProvider（system/light/dark）、Settings 永続化拡張、全データ削除 2 段階確認、ダークモード即時切替、ListItem / Toggle / OptionPickerModal / DataDeletionConfirmModal / Snackbar | 271 |
 | Sprint 7-B | 2026-04-29 | 音声（Web Audio）、ハプティクス（navigator.vibrate）、AppState 検知、Web キーボードショートカット（Game 2 ←/→・Game 3 1-8・Esc）、Game 1/2/3 へ正解音 + 軽振動を組込 | 294 |
+| — v2.0 リブート境界 — | | 以下は v2.0（spec.md）の履歴。上記は v1.x アーカイブ | |
+| **Sprint 1 (v2.0)** | 2026-05-30 | v1/v1.1/v1.2 の全ゲーム・旧ルーター・旧データ層・旧テストを撤去。流用基盤（GaborPatch / gaborPixels / calibration / theme / i18n 基盤）を残置。App.tsx を v2.0 最小プレースホルダへ。`.gitignore` に作業用 APK/PNG 追記。詳細は §0 | **46** |
+| **Sprint 2 (v2.0)** | 2026-05-30 | データ層（`gaboreye:v2:*` schema/keys/store/repository/migration/settings/dataReset）+ 設定タブ UI（F-13・F-11）。詳細は §0-S2 | **100** |
+| **Sprint 3 (v2.0)** | 2026-05-30 | ゲームコア ロジック層（`src/lib/v2/` rng/patch/roundGen/scoring/gameMachine + `src/state/sessionRecorder`）。F-01 格子生成・F-02 採点3方式・F-04 0〜100 集計。描画/UI は未配線（S4）。詳細は §0-S3 | **180** |
 
 各スプリント完了時に Generator が 1 行追記する。
 
@@ -2501,3 +3253,359 @@ npm run web                                    # http://localhost:8083 で稼働
 
 1. **Evaluator 評価依頼**（オーケストレーター作業）
 2. v1.1 試作 → 取捨選択 → リリースフェーズへの整理（13 G0XResultScreen.tsx の整理、`clock-8` / `grid-4` レイアウトファイルの整理など）
+
+---
+
+## Sprint 22 Stage 1 — v1.2 リブート（共通基盤・削除・データ層）
+
+### 起動フロー（v1.2）
+
+```
+[アプリ起動]
+  → loading（裏で v1/v1.1 永続化キー検出）
+  → DataResetNotice（初回 v1.2 起動 + 旧データ検出時のみ、1 回限り）
+  → Onboarding（onboardingCompleted=false のみ）
+  → DistanceReminder（F-16、3 秒自動進行、最初から赤カウントダウン + tick 音）
+  → CourseRunner（7 ゲーム順次：G-01 → G-03 → G-04 → G-05 → G-06 → G-07 → G-13）
+    - 各ゲーム placeholder 5 秒（Stage 2 で本実装）
+    - ゲーム間 interstitial 5 秒（ResultBadge + 「次へ」+ CountdownTimer）
+  → CourseCooldown（F-15、10 秒、CountdownTimer xl + tick 音 + gameEnd 音）
+  → PostSession（F-21 placeholder、Stage 3 で本実装）
+    - 進捗 / バッジ / 設定の入口あり
+    - 「もう一度」で distance-reminder へ戻れる（暫定）
+```
+
+### 廃止された動線
+
+- **ホーム画面**（旧 F-04）：完全廃止、起動 = 即 F-16
+- **ゲーム一覧画面**：完全廃止
+- **単体プレイ**（旧 F-06）：完全廃止
+- **F-18 `releaseEnabled` 機構**：完全廃止、7 ゲームをハードコード
+
+### 削除されたゲーム
+
+- G-02（左右並び傾き判別）
+- G-08（残像方位弁別）
+- G-09（側方マスキング）
+- G-10（テクスチャ分離）
+- G-11（Vernier 整列判定）
+- G-12（クラウディング）
+
+`gameRegistry` から完全に除外され、後続番号は再採番されない。
+
+### 永続化キー prefix 変更
+
+- v1.1 までの `gaboreye:v1.1:*` から **`gaboreye:v1.2:*`** に変更（spec §11）
+- 起動時 F-17 拡張：v1 / v1.1 永続化キー検出 → 全消去 → DataResetNotice 表示 → 完了
+- v1.1 → v1.2 マイグレーションコードは書かず「読み取り無視 → v1.2 キーで新規初期化」（spec §A-2）
+
+### v1.2 paramRange（system.md §1.17 Designer 提案値）
+
+| ゲーム | パラメータ | min（難） | max（易） | initial | step |
+|---|---|---|---|---|---|
+| G-01 | 回転速度（°/s） | 1 | 6 | 3 | 0.5 |
+| G-03 | odd-one 角度差（°） | 1 | 11 | 6 | 1 |
+| G-04 | コントラスト差 | 0.05 | 0.4 | 0.20 | 0.025 |
+| G-05 | cpd 比 | 1.1× | 2.5× | 1.5× | 0.1 |
+| G-06 | SD 比 | 1.1 | 2.0 | 1.5 | 0.1（v1.1 維持） |
+| G-07 | 向きズレ許容角（°） | 3 | 15 | 8 | 1 |
+| G-13 | 数字コントラスト | 0.02 | 0.15 | 0.05 | 0.01 |
+
+### バッジ B-01〜B-12（v1.2 で 13 → 12）
+
+旧 B-07「弁別の達人（G-02 依存）」を廃止、B-08 以降を再採番（spec §10）。
+
+### 共通基盤新規コンポーネント
+
+- `CountdownTimer`（CD-1）：F-07.1 統一カウントダウン UI（白→黄→赤、太字補強）
+- `ResultBadge`（RB-1）：F-10 試行全体総合 ✅/❌（AAA 7:1）
+- `SafeAreaWrapper`（SA-1）：NF-29/30、`mode="game"` で top inset 無視（フルスクリーン許容）
+- `platform/audio.ts`：F-19 抽象、`playEvent('correct'|'wrong'|'tick3'|'tick2'|'tick1'|'gameEnd'|'badge')`
+- `GaborPatch.tsx`：N=1.5 矩形クリッピング刷新（NF-27/28、角度自由化対応）
+
+### Stage 1 完了時テスト件数
+
+- **Sprint 21 完了時**：2307 件
+- **Sprint 22 Stage 1 完了**：**1397 件 PASS / 1397 total**（旧ゲーム関連テスト 60+ 削除 + v1.2 用テスト +78 アサーション追加）
+- **Sprint 22 Stage 1 ループバック修正後**：**1381 件 PASS / 1381 total**（dead export テスト除去・i18n 文言整理）
+- **Sprint 22 Stage 2-A 完了**：**1454 件 PASS / 1454 total**（G-01 v1.2 / G-04 / G-05 / G-06 試行・採点ロジック・画面テスト +73 件）
+
+### Sprint 22 Stage 2-A 実装範囲（v1.2 個別ゲーム本実装、3×3 系）
+
+- **G-01 完全刷新**（コンセプト変更）：v1.1 の morphing 検出 → 3×3 グリッド + ランダム個数（1〜3）の回転パッチを複数選択。staircase は回転速度（°/s）。requestAnimationFrame 駆動、reduced-motion 時 5fps 階段化
+- **G-03 確認のみ**：v1.1.2 で中央線方式撤去済み + F-10 統一仕様準拠済み。動作変更なし
+- **G-04 / G-05 / G-06 共通 3×3 化**：3×3 oddball 構造で「違うパッチを複数選択」に統一。共通基盤 `grid3x3OddballTrial`（個数分布 35/40/25 抽選 + 部分点採点）+ 共通 UI `Grid3x3OddballStimulus`
+  - G-04 staircase = コントラスト差（base 0.3 ± param）
+  - G-05 staircase = cpd 比 r（base × r / ÷ r）
+  - G-06 staircase = SD 比 r（base × r / ÷ r）
+- **CourseRunner**：5 ゲームを実画面に差し替え（G-07 / G-13 は Stage 2-B 持ち越しのため Placeholder 維持）
+
+### Sprint 22 Stage 2-A 新規ファイル
+
+ロジック（5）：
+- `src/lib/v11/g01v12Trial.ts`（G-01 v1.2）
+- `src/lib/v11/grid3x3OddballTrial.ts`（共通基盤）
+- `src/lib/v11/g04v12Trial.ts` / `g05v12Trial.ts` / `g06v12Trial.ts`
+
+UI コンポーネント（2）：
+- `src/components/v11/games/G01RotationGridStimulus.tsx`
+- `src/components/v11/games/Grid3x3OddballStimulus.tsx`
+
+画面（6）：
+- `src/screens/v11/games/G04ContrastDiscriminationScreen.tsx` + `G04ResultScreen.tsx`
+- `src/screens/v11/games/G05SpatialFrequencyScreen.tsx` + `G05ResultScreen.tsx`
+- `src/screens/v11/games/G06GaussianSizeScreen.tsx` + `G06ResultScreen.tsx`
+
+刷新：
+- `src/screens/v11/games/G01ChangeDetectScreen.tsx` / `G01ResultScreen.tsx`（v1.2 化）
+- `src/screens/v11/course/CourseRunnerScreen.tsx`（実ゲーム差し替え）
+- `src/lib/v11/resultMarks.ts`（buildG01v12Marks / buildGrid3x3OddballMarks 追加）
+
+### Sprint 22 Stage 2-B 完了
+
+- **件数**：**1496 件 PASS / 1496 total**（Stage 2-A の 1454 から +42 件）
+- **typecheck / build:web**：PASS（dist 出力 763 kB）
+
+### Sprint 22 Stage 2-B 実装範囲（G-07 v1.2 + G-13 領域拡大 + ResultOverlay 完全 v1.2 化）
+
+- **G-07 v1.2 完全刷新（22-F）**：
+  - 4×4 グリッド維持、同じ向き個数 2〜5 ランダム（25/35/25/15）、ノイズは基準向きから ≥staircase 値離す
+  - メッセージ「向きが同じものを選んで」（個数伏字、A11 確定）
+  - 採点 TP+1 / FP-1 / FN 0 部分点（共通方針に統一）
+  - staircase: min=3 / max=15 / initial=8 / step=1（Designer 提案準拠）
+  - 新規ロジック `g07v12Trial.ts` + UI `Grid4x4OddballStimulus.tsx`
+- **G-13 領域拡大（22-G）**：
+  - 安全領域内で上 70% を刺激 / 下 30% を keypad に最大化（A4 確定）
+  - 新規 `computeG13StimulusLayoutV12({ widthPx, heightPx })`：375x667 で刺激 343px 角、PC 横は最大 480px
+  - keypad-10 ボタン 48〜80px（OPT-2 維持）
+  - v1.1 の `computeG13StimulusLayout` は後方互換のため残置
+- **F-10 ResultOverlay 完全 v1.2 化（22-I 残）**：
+  - 旧 prop（`mode` / `onPlayAgain` / `onBackToList` / `onGoHome` / `onboardingCompletionMode`）完全削除
+  - サマリパネル（result-overlay-summary-panel）撤去
+  - 🕐 アイコン削除、`CountdownTimer (CD-1)` を採用（数字のみ + 色変化、点滅禁止）
+  - 試行全体総合 ✅/❌（`ResultBadge / RB-1`）を刺激領域直下に 1 個追加
+  - 6 ゲーム ResultScreen（G-01 / G-03 / G-04 / G-05 / G-06 / G-13）の `<ResultOverlay>` 呼び出しから旧 prop を全削除
+- **CourseRunner**：G-07 / G-13 を Stage 2-A の placeholder から実画面に差し替え。**7 ゲーム順次プレイが完全動作**
+
+### Sprint 22 Stage 2-B 新規ファイル
+
+ロジック / UI（2）：
+- `src/lib/v11/g07v12Trial.ts`（G-07 v1.2 trial 純関数）
+- `src/components/v11/games/Grid4x4OddballStimulus.tsx`（4×4 oddball UI）
+
+刷新（5）：
+- `src/components/v11/ResultOverlay.tsx`（完全 v1.2 化）
+- `src/screens/v11/games/G07EdgeHuntScreen.tsx`（v1.2 oddball へ書き換え）
+- `src/screens/v11/games/G07ResultScreen.tsx`（v1.2 4×4 oddball + F-10 統一）
+- `src/screens/v11/games/G13EmbeddedNumeralScreen.tsx`（70/30 領域拡大）
+- `src/screens/v11/games/G13ResultScreen.tsx`（70/30 layout 共有）
+
+更新（小幅）：
+- `src/lib/v11/resultMarks.ts`（buildG07v12Marks 追加）
+- `src/lib/v11/g13Trial.ts`（computeG13StimulusLayoutV12 追加）
+- `src/screens/v11/course/CourseRunnerScreen.tsx`（G-07 / G-13 実画面差し替え）
+- `src/screens/v11/games/G01-G06 ResultScreen.tsx`（旧 prop 撤去）
+
+テスト（書換 / 追加）：
+- `tests/v11/lib/g07v12Trial.test.ts`（新規 35 件）
+- `tests/v11/components/v11/ResultOverlay.test.tsx`（v1.2 仕様で書換 25 件）
+- `tests/v11/screens/games/G07EdgeHuntScreen.test.tsx`（v1.2 で書換 9 件）
+- `tests/v11/screens/games/G07ResultScreen.test.tsx`（v1.2 で書換 11 件）
+- `tests/v11/lib/resultMarksV12.test.ts`（buildG07v12Marks 追記 +4）
+- `tests/v11/lib/g13Trial.test.ts`（computeG13StimulusLayoutV12 追記 +7）
+
+### 次の Stage（Stage 3）
+
+#### Stage 3 — F-21 事後画面・アイコン・永続化・Native
+- F-21 連続プレイ事後画面（ワイドスコア + 7 ゲーム結果一覧 + 入口ボタン）
+- CourseRunner からの実ゲーム永続化（SessionRecord / DailyStats / 連続日数 / バッジ評価）の本接続
+- アプリアイコン全プラットフォーム差し替え（ガボール 45° 図柄）
+- バッジ B-01〜B-12 の 7 ゲーム前提評価ロジック確定
+- expo-audio / expo-haptics の Native 配線完全化
+- 設定画面の音 / 振動トグル追加（F-14）
+- G-13 staircase 値の Designer 提案値（initial 0.15 / step 0.025）への切替検討（履歴互換注意）
+
+
+---
+
+### Sprint 22 Stage 3 完了
+
+- **件数**：**1570 件 PASS / 1570 total（129 suites）**（Stage 2-B の 1496 から +74 件 / +5 suites）
+- **typecheck**：PASS
+- **build:web**：PASS（dist 出力 795 kB、Stage 2-B の 763 kB から +32 kB：PostSession + sessionPersistence + native haptics shim）
+
+### Sprint 22 Stage 3 実装範囲（F-21 / アイコン / Native audio / バッジ / 設定 / 永続化 / G-13 staircase）
+
+- **F-21 連続プレイ事後画面（新設）**：`src/screens/v11/PostSessionScreen.tsx`
+  - 上部ロゴ + ⚙ 設定 IconButton（56pt）
+  - ワイドスコア（72px Bold tabular-nums + ／100）
+  - ストリーク（🔥 + N 日連続）
+  - セパレータ + section title「各ゲームの結果」
+  - 7 ゲーム結果リスト（左ゲーム名 / 中央 ✅❌ / 右閾値、各行 72pt）
+  - 入口ボタン 3 つ（📊 進捗 Primary / 🏅 バッジ Secondary / ⚙ 設定 Tertiary、各 64pt）
+  - SafeAreaWrapper mode="default"
+  - 「もう一度プレイ」ボタンは設けない（spec F-21 受け入れ：1 日 1 周）
+- **セッション永続化（新設）**：`src/lib/v11/sessionPersistence.ts`
+  - `finalizeCourseSession(input)`：SessionRecord 保存 + DailyStats 更新 + Streak 更新 + バッジ評価を一括
+  - `computeWideScoreFromResults(results)`：今回セッションのワイドスコア純関数
+- **CourseRunner 統合**：
+  - `onCompleteWithResults?: (results) => void` prop を追加
+  - 各実ゲームの `onComplete` で結果を捕捉（`extractCourseGameOutcome` 経由）
+  - 7 ゲーム完走 + クールダウン後に `onCompleteWithResults` を呼ぶ
+- **AppRouter 統合**：
+  - `finalizeAndGoToPostSession` ハンドラを追加（永続化 + postsession 遷移）
+  - postsession ルート：本実装 PostSessionScreen に切替（postSessionData あり時）
+  - 旧 PostSessionPlaceholder は postSessionData 未設定時のフォールバック
+- **G-13 staircase 値切替**：
+  - paramRange を `{ min: 0.05, max: 0.30, initial: 0.15, step: 0.025 }` に変更（Designer 提案、system.md §1.17.10）
+  - v1.2 起動時に staircase は全リセット（F-17）されるため履歴互換は気にしない
+- **F-20 アプリアイコン全プラットフォーム差し替え**：
+  - `scripts/generate-icons.py`（Pillow 使用）でマスター 1024×1024 から派生サイズ生成
+  - `assets/icon.png`（iOS / 共通マスター）/ `adaptive-icon-foreground.png` / `adaptive-icon-background.png`（単色 #1A1D24）/ `splash-icon.png` / `pwa-512.png` / `pwa-192.png` / `favicon.png`
+  - `assets/icons/app/icon-source.svg`（編集用 SVG マスター）
+  - 図柄：ガボールパッチ 45°（左下 → 右上、時計回り）/ 暗背景 #1A1D24 / コントラスト 0.78 / ガウス窓
+  - `app.json` 更新：`expo.icon` / `expo.splash.image` / `expo.android.adaptiveIcon` / `expo.android.icon` / `expo.ios.icon` / `expo.web.favicon`
+- **F-19 Native audio・haptics 配線**：
+  - `expo-haptics` 15.0.8 を依存追加（Expo SDK 54 互換）
+  - `src/platform/audio.ts` に動的 require で Native ハプティクス配線
+  - `Platform.OS=ios/android` のとき `expo-haptics.impactAsync(ImpactFeedbackStyle.Light/.Medium/.Heavy)` を呼ぶ
+  - badge イベント：Heavy → 80ms 後に Medium（heavyThenMedium）
+  - Web は従来通り `navigator.vibrate`、音は OscillatorNode 合成
+  - **Native の音（mp3 再生）は本ステージでも未配線**（expo-audio / expo-av 導入は別スプリント、実機での音再生検証込みのため）。Native では音は no-op
+- **設定画面の音/振動トグル**：
+  - 既存の `SettingsScreen.tsx` で「効果音」「振動」が個別トグルで提供済み（A7 / F-19 確定）
+  - audio.ts の `setSoundEnabled` / `setHapticsEnabled` と連動
+- **バッジ B-01〜B-12 再評価ロジック**：
+  - `src/lib/v11/badges.ts` は既に 12 種に再構成済み（Stage 1）
+  - Stage 3 で `finalizeCourseSession` から `evaluateBadgesV11` を呼んで新規獲得を返す動線を本接続
+  - 新規獲得時は `playEvent('badge')` を発火（音 + ハプティクス）
+
+### Sprint 22 Stage 3 新規ファイル
+
+ロジック（1）：
+- `src/lib/v11/sessionPersistence.ts`（finalizeCourseSession + computeWideScoreFromResults）
+
+画面（1）：
+- `src/screens/v11/PostSessionScreen.tsx`（F-21）
+
+スクリプト・アセット（9）：
+- `scripts/generate-icons.py`（アイコン生成スクリプト）
+- `assets/icon.png` / `assets/adaptive-icon-foreground.png` / `assets/adaptive-icon-background.png` / `assets/splash-icon.png` / `assets/pwa-512.png` / `assets/pwa-192.png` / `assets/favicon.png`
+- `assets/icons/app/icon-source.svg`
+
+テスト（4 ファイル / 76 アサーション）：
+- `tests/v11/lib/sessionPersistence.test.ts`（17 件）
+- `tests/v11/screens/PostSessionScreen.test.tsx`（19 件）
+- `tests/v11/screens/course/CourseRunnerStage3.test.tsx`（2 件、統合）
+- `tests/v11/platform/audioNativeHaptics.test.ts`（6 件、Native iOS）
+- `tests/v11/assets/appIcons.test.ts`（30 件、F-20 アセット存在 + app.json 参照）
+- 既存テスト 4 件（G-13 paramRange 変更で値更新）：staircaseV11 / g13Trial / G13EmbeddedNumeralScreen / sessionPersistence
+
+更新（4）：
+- `src/state/gameRegistry.ts`（G-13 paramRange 切替）
+- `src/screens/v11/course/CourseRunnerScreen.tsx`（onCompleteWithResults + 結果捕捉）
+- `src/navigation/v11/AppRouterV11.tsx`（PostSessionScreen 配線 + finalizeAndGoToPostSession）
+- `src/platform/audio.ts`（Native expo-haptics 動的配線）
+- `app.json`（アイコン参照）
+- `package.json`（expo-haptics 追加）
+
+### アイコン再生成方法
+
+```
+python3 scripts/generate-icons.py
+```
+
+すべての PNG が `assets/` 配下に書き出される（Pillow 12.x が必要）。
+SVG マスターを編集する場合は `assets/icons/app/icon-source.svg` を直接編集後、
+スクリプトで PNG を再生成する。
+
+### Native audio・haptics 動作確認
+
+| 環境 | 音 | ハプティクス | テスト |
+|---|---|---|---|
+| **Web（Chrome / Safari）** | OscillatorNode 合成（実音） | navigator.vibrate（モバイル Web のみ） | 自動（`tests/v11/platform/audio.test.ts`） |
+| **iOS Expo Go** | expo-audio で `assets/audio/*.mp3` 再生（Sprint 23、要実機確認） | expo-haptics.impactAsync（実装済、要実機確認） | Native モック自動（`tests/v11/platform/audioNativeHaptics.test.ts`） |
+| **Android Expo Go** | expo-audio で `assets/audio/*.mp3` 再生（Sprint 23、要実機確認） | expo-haptics.impactAsync（実装済、要実機確認） | 同上 |
+
+---
+
+## Sprint 23 — expo-audio 導入で Native 音 (mp3) 対応
+
+Sprint 22 Stage 3 で残っていた Native 音再生未対応（no-op）を解消し、F-19 を
+Web / iOS / Android すべてで完全実装にした。
+
+### 採用パッケージ
+
+- **`expo-audio: ~1.1.1`**（Expo SDK 54.0.34 対応、rapidreading2 で動作実績あり）
+- `app.json` plugins に `"expo-audio"` を追加
+
+### 音源 mp3（assets/audio/）
+
+ffmpeg で sine 波合成。Web の OscillatorNode と**同じ周波数・長さ**で揃え、
+プラットフォーム間の体感を統一。
+
+| ファイル | 音 | サイズ |
+|---|---|---|
+| `correct.mp3` | C5 + E5（110ms + 130ms） | 3.7 KB |
+| `wrong.mp3` | A3（200ms） | 3.7 KB |
+| `tick.mp3` | 1200 Hz（70ms、tick3/tick2/tick1 共通、音量は EVENT_CONFIG で漸増） | 1.6 KB |
+| `end.mp3` | A4 + C5（180ms + 240ms） | 5.9 KB |
+| `badge.mp3` | C5 + E5 + G5（130 + 130 + 200ms） | 6.2 KB |
+
+合計 ~21 KB。Web ビルドには含まれない（require は Native でのみ評価）。
+
+### 音源再生成手順
+
+```bash
+cd assets/audio
+ffmpeg -y -f lavfi -i "sine=frequency=523.25:duration=0.11" \
+       -f lavfi -i "sine=frequency=659.25:duration=0.13" \
+       -filter_complex "[0:a][1:a]concat=n=2:v=0:a=1,volume=0.18" \
+       -ar 44100 -ac 1 -b:a 96k correct.mp3
+# 他 4 ファイルも同様（詳細は docs/sprints/sprint-23-self-review.md A-2 参照）
+```
+
+ffmpeg が必要（macOS なら `brew install ffmpeg`）。
+
+### Native 実機確認の申し送り
+
+Native 音は自動テストで配線（`createAudioPlayer` / `seekTo(0)` / `play()` /
+`setAudioModeAsync({ playsInSilentMode: false, ... })`）まで検証済み。
+ただし**実音再生の体感**は実機 Expo Go でのみ確認可能。確認すべき項目：
+
+1. **5 種の音が実際に鳴ること**（iOS / Android Expo Go）
+   - G-01 で正解 / 不正解時に correct.mp3 / wrong.mp3
+   - F-07 / F-15 / F-16 のカウントダウン残り 3-2-1 秒で tick.mp3（音量漸増）
+   - 60 秒ゲーム終了時に end.mp3
+   - バッジ獲得時に badge.mp3（強+中の連打ハプティクスと同期）
+2. **iOS サイレントスイッチ ON 時**：音が鳴らず、ハプティクスは継続発火（NF-33）
+3. **Android システム音量 0**：音が鳴らない（OS 任せ）
+4. **NF-31 音再生レイテンシ 100ms 以内**：タップ → 音まで体感遅延が無いこと
+   （初回 1 発目だけ lazy 生成のため遅い可能性あり、必要なら起動時 prime を
+   検討）
+
+### Sprint 23 新規ファイル
+
+アセット（5）：
+- `assets/audio/correct.mp3` / `wrong.mp3` / `tick.mp3` / `end.mp3` / `badge.mp3`
+
+ドキュメント（1）：
+- `docs/sprints/sprint-23-self-review.md`
+
+### Sprint 23 更新ファイル
+
+- `package.json`（expo-audio ~1.1.1 追加）
+- `app.json`（plugins に "expo-audio" 追加）
+- `src/platform/audio.ts`（Native 音再生：`getNativePlayer` / `playNativeSound` /
+  `configureAudioMode` / `loadNativeSource` を追加。`playEvent` の Native 分岐を
+  no-op から expo-audio 呼び出しに変更。`_resetPlatformAudioForTest` も拡張）
+- `tests/v11/platform/audio.test.ts`（+5 件、Native ソースキー集約検証）
+- `tests/v11/platform/audioNativeHaptics.test.ts`（+10 件、expo-audio 配線検証）
+- `docs/run.md`（Sprint 23 セクション追記、Native audio 状態更新）
+
+### テスト件数
+
+- Sprint 22 Stage 3 後：129 suites / **1570 tests**
+- Sprint 23 後：129 suites / **1585 tests**（+15 件、新スイート追加なし）
+- typecheck PASS / build:web PASS（bundle サイズは 796 kB で同一）
+

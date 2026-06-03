@@ -17,51 +17,51 @@
 export const palette = {
   light: {
     neutral0: '#FFFFFF',
-    neutral50: '#FAFAFA',
-    neutral100: '#F2F3F5',
+    neutral50: '#F8F9FB',
+    neutral100: '#F0F2F5',
     neutral200: '#E3E5EA',
     neutral300: '#C9CDD4',
     neutral400: '#9AA0A8',
-    neutral500: '#4D525C', // 7.84:1 on white（OPT-5 床）
-    neutral600: '#4A4F5A', // 7.87:1 on canvas
+    neutral500: '#4D525C',
+    neutral600: '#4A4F5A',
     neutral700: '#2F3239',
     neutral800: '#1A1C21',
-    neutral900: '#0E0F12', // 18.36:1 on canvas
-    brandPrimary: '#13449D', // 8.97:1 (AAA)
-    brandPrimaryHover: '#0F3580', // 11.41:1
-    brandAccent: '#0A6C53', // 装飾専用
-    semanticSuccess: '#0F7A4F', // 装飾専用（5.36:1）
-    semanticWarning: '#7A4300', // 7.98:1
-    semanticError: '#A11C16', // 7.80:1
-    semanticInfo: '#0E5AA6',
-    streakFlameFg: '#7A3C00', // 8.49:1
-    streakFlameBg: '#FFE9D6',
-    disclaimerBg: '#FFF8E1',
-    highlightCorrect: '#FFC53D',
+    neutral900: '#0E0F12',
+    brandPrimary: '#4F46E5', // Vibrant Indigo
+    brandPrimaryHover: '#4338CA',
+    brandAccent: '#E11D48', // Vibrant Rose
+    semanticSuccess: '#10B981', // Emerald
+    semanticWarning: '#F59E0B', // Amber
+    semanticError: '#EF4444', // Red
+    semanticInfo: '#3B82F6', // Blue
+    streakFlameFg: '#EA580C', 
+    streakFlameBg: '#FFEDD5',
+    disclaimerBg: '#FEF3C7',
+    highlightCorrect: '#FBBF24',
   },
   dark: {
     neutral0: '#000000',
-    neutral50: '#0B0B0E',
-    neutral100: '#15171C',
-    neutral200: '#1F2229',
-    neutral300: '#2B2F39',
+    neutral50: '#0B0C10', // Deep Cyberpunk Black
+    neutral100: '#12131A',
+    neutral200: '#1F222E',
+    neutral300: '#2B2F3E',
     neutral400: '#5C6270',
-    neutral500: '#9CA3AD', // 8.26:1
+    neutral500: '#9CA3AD',
     neutral600: '#B6BAC2',
     neutral700: '#D4D7DC',
     neutral800: '#E8EAEE',
     neutral900: '#F5F6F8',
-    brandPrimary: '#7FB0FF',
-    brandPrimaryHover: '#A6CBFF',
-    brandAccent: '#4FD9B0',
-    semanticSuccess: '#5DD3A0',
-    semanticWarning: '#FFB266',
-    semanticError: '#FF8A82',
-    semanticInfo: '#7FB0FF',
-    streakFlameFg: '#FFB266',
-    streakFlameBg: '#3E2D0A',
-    disclaimerBg: '#3E2D0A',
-    highlightCorrect: '#FFD66B',
+    brandPrimary: '#00E5FF', // Neon Cyan
+    brandPrimaryHover: '#00B8CC',
+    brandAccent: '#FF007F', // Neon Pink
+    semanticSuccess: '#34D399',
+    semanticWarning: '#FBBF24',
+    semanticError: '#F87171',
+    semanticInfo: '#60A5FA',
+    streakFlameFg: '#FBBF24',
+    streakFlameBg: '#451A03',
+    disclaimerBg: '#451A03',
+    highlightCorrect: '#FDE047',
   },
   // ガボール表示領域は OS のダークモード非追従（system.md §1.2 末尾）
   gabor: {
@@ -75,6 +75,13 @@ export const palette = {
 // ---------------------------------------------------------------------------
 
 export type ThemeMode = 'light' | 'dark';
+
+/**
+ * ダークモードのユーザー設定（Settings.darkMode）。
+ * v2.0：theme を自己完結させるため、ここを正とする
+ * （旧 v1 storage から移設。S2 の v2 Settings 型はこれを再エクスポートする）。
+ */
+export type DarkModePreference = 'system' | 'light' | 'dark';
 
 export type Colors = {
   bgCanvas: string;
@@ -98,6 +105,9 @@ export type Colors = {
   semanticError: string;
   semanticWarning: string;
   semanticSuccess: string;
+  // v2.0：ストリーク炎アイコン前景（system.md §1.3、StatTile ST-1）
+  streakFlameFg: string;
+  streakFlameBg: string;
   // v1.1.1：選択枠を控えめにする（components.md §3 / §4、system.md §1.8）
   selectionSubtle: string;
   selectionSubtleIdle: string;
@@ -152,6 +162,8 @@ export function getColors(mode: ThemeMode): Colors {
     semanticError: p.semanticError,
     semanticWarning: p.semanticWarning,
     semanticSuccess: p.semanticSuccess,
+    streakFlameFg: p.streakFlameFg,
+    streakFlameBg: p.streakFlameBg,
     // v1.1.1：中性グレー、選択枠は線幅 2px / 1px で控えめに
     // ライト：rgba(60,64,72,0.55) 選択中 / rgba(60,64,72,0.30) 未選択
     // ダーク：rgba(220,224,232,0.55) 選択中 / rgba(220,224,232,0.30) 未選択
@@ -251,11 +263,11 @@ export const spacing = {
 // ---------------------------------------------------------------------------
 
 export const radius = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
+  xs: 6,
+  sm: 12,
+  md: 16,
+  lg: 24,
+  xl: 32,
   pill: 999,
 } as const;
 
@@ -279,6 +291,124 @@ export const motion = {
   durationSlow: 320,
   durationGameFeedback: 1500,
   durationGameMaskInterval: 200,
+} as const;
+
+// ---------------------------------------------------------------------------
+// 6.5. v1.2 統一カウントダウン UI トークン（system.md §1.11）
+// ---------------------------------------------------------------------------
+
+/**
+ * F-07.1 統一カウントダウン UI 色トークン（v1.2 新規、system.md §1.11.1）。
+ *
+ * F-07 / F-15 / F-16 / F-10 共通：
+ *   - normal：通常時（残り 6 秒以上） → 白
+ *   - warn：≤5 秒 → 鮮黄
+ *   - danger：≤3 秒 → 明赤（design-qa amendment で `#FF8A82` に変更、AAA 7.0:1）
+ *
+ * 補強表現：色変化に加え weight（Bold 700 → Black 900）と tabular-nums を併用。
+ * 点滅エフェクトは禁止（NF-11）。
+ */
+export const countdownColors = {
+  normal: '#FFFFFF',
+  warn: '#FFD600',
+  danger: '#FF8A82',
+  /** ライトテーマで明背景上に置く場合の代替。通常はゲーム画面の dark surface 上 */
+  normalOnLight: '#1A1D24',
+  dangerOnLight: '#B91C1C',
+} as const;
+
+/**
+ * F-10 結果オーバーレイの試行全体総合 ✅/❌ 用カラー（v1.2 新規、system.md §1.19）。
+ *
+ * design-qa amendment：白文字 ✓/✕ とのコントラスト 7:1 以上（AAA）を満たす：
+ *   - light success #0A6238 + white = 7.45:1
+ *   - light danger  #A82018 + white = 7.28:1
+ *   - dark  success #3FCB7E + black = 10.05:1
+ *   - dark  danger  #FF6E73 + black = 7.73:1
+ */
+export const resultBadgeColors = {
+  light: {
+    successBg: '#0A6238',
+    dangerBg: '#A82018',
+    fgOnSuccess: '#FFFFFF',
+    fgOnDanger: '#FFFFFF',
+  },
+  dark: {
+    successBg: '#3FCB7E',
+    dangerBg: '#FF6E73',
+    fgOnSuccess: '#000000',
+    fgOnDanger: '#000000',
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// 6.6. v2.0 ゲーム描画・結果開示トークン（system.md §1.4、S4）
+// ---------------------------------------------------------------------------
+
+/**
+ * v2.0 カウントダウン色（system.md §1.4、不透明バー背景前提で 7:1 担保）。
+ *
+ * GameTopBar は不透明背景 `bg`（light #FFFFFF / dark #15171C）の上にカウントダウン
+ * を置く。その背景に対する 7:1 検証値（system.md §1.5）：
+ *   - dark：white 17.93 / warn #FFD600 12.70 / danger #FF8A82 7.86
+ *   - light：normal 黒 18.4 / warn・danger 暗赤 #A11C16 7.80
+ * 明背景では黄が 7:1 を割るため warn/danger とも暗赤を使う（色＋太字補強、NF-12）。
+ */
+export const countdownV2 = {
+  light: {
+    bg: '#FFFFFF',
+    normal: '#0E0F12',
+    warn: '#A11C16',
+    danger: '#A11C16',
+  },
+  dark: {
+    bg: '#15171C',
+    normal: '#FFFFFF',
+    warn: '#FFD600',
+    danger: '#FF8A82',
+  },
+} as const;
+
+/**
+ * v2.0 結果開示の色（system.md §1.4、OV-1〜3）。
+ * - check.tp：✅ 実線・不透明 / check.fn：✅ 透過 50%（取りこぼし） / cross.fp：❌
+ * - overlayBg：アイコン下の半透明円（縞を完全には隠さない）
+ * - aggregate：刺激領域直下の総合 ✅/❌（白/黒文字 7:1 以上）
+ */
+export const resultV2 = {
+  light: {
+    checkTp: '#0A6238',
+    checkFn: '#0A6238',
+    crossFp: '#A82018',
+    overlayBg: 'rgba(255,255,255,0.82)',
+    aggregateSuccessBg: '#0A6238',
+    aggregateDangerBg: '#A82018',
+    aggregateFg: '#FFFFFF',
+  },
+  dark: {
+    checkTp: '#3FCB7E',
+    checkFn: '#3FCB7E',
+    crossFp: '#FF6E73',
+    overlayBg: 'rgba(20,24,32,0.82)',
+    aggregateSuccessBg: '#3FCB7E',
+    aggregateDangerBg: '#FF6E73',
+    aggregateFg: '#000000',
+  },
+} as const;
+
+/**
+ * v2.0 ガボール直接選択枠（system.md §1.4 / GG-2）。
+ * 縞の視認を阻害しない控えめさ。選択中 2px、未選択 1px（任意）。
+ */
+export const selectionV2 = {
+  light: {
+    subtle: 'rgba(60,64,72,0.85)',
+    idle: 'rgba(60,64,72,0.30)',
+  },
+  dark: {
+    subtle: 'rgba(235,238,242,0.90)',
+    idle: 'rgba(235,238,242,0.35)',
+  },
 } as const;
 
 // ---------------------------------------------------------------------------

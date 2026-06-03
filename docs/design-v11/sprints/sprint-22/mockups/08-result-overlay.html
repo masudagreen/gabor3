@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>S22-RESULT-OVERLAY — F-10 結果オーバーレイ (3×3 + パッチ上 ◯/✕ + 試行全体 ✅/❌)</title>
+<style>
+  :root {
+    --bg-canvas: #0F1115;
+    --bg-surface: #1A1D24;
+    --gabor-bg: #808080;
+    --fg-primary: #FFFFFF;
+    --fg-muted: #B7BCC9;
+    --countdown-normal: #FFFFFF;
+    --selection-subtle: rgba(220, 224, 232, 0.55);
+    --selection-idle: rgba(220, 224, 232, 0.30);
+    --action-primary: #13449D;       /* token-aligned */
+    --semantic-success: #54C77A;
+    --semantic-danger: #F4807F;
+    --result-success: #0A6238;       /* v1.2 amendment: 暗緑で 7:1 確保 */
+    --result-success-fg: #FFFFFF;    /* 7.45:1 on #0A6238 (AAA) */
+    --result-danger:  #A82018;       /* v1.2 amendment: 暗赤で 7:1 確保 */
+    --result-danger-fg: #FFFFFF;     /* 7.28:1 on #A82018 (AAA) */
+    --overlay-bg: rgba(255, 255, 255, 0.82);
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-canvas);
+    color: var(--fg-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    box-sizing: border-box;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  .container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    max-width: 900px; margin: 24px auto; padding: 16px;
+  }
+  @media (min-width: 800px) {
+    .container { grid-template-columns: 1fr 1fr; }
+  }
+  .device {
+    max-width: 375px; width: 100%;
+    background: var(--gabor-bg);
+    border-radius: 32px; overflow: hidden;
+    border: 1px solid #2A2D34;
+    display: flex; flex-direction: column;
+    margin: 0 auto;
+  }
+  .statusbar {
+    height: 88px;
+    background: rgba(26, 29, 36, 0.85);
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 16px 16px 12px 16px;
+  }
+  .close { width: 48px; height: 48px; background: transparent; border: none; color: var(--fg-primary); font-size: 28px; }
+  .countdown { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--countdown-normal); }
+  .placeholder { width: 48px; }
+  .grid-frame {
+    margin: 24px auto;
+    width: min(320px, calc(100% - 32px));
+    aspect-ratio: 1 / 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 8px;
+    position: relative;
+    pointer-events: none;
+  }
+  .cell {
+    background: var(--gabor-bg);
+    border-radius: 12px;
+    overflow: hidden;            /* 矩形クリッピング (NF-27/28) */
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cell svg { display: block; width: 100%; height: 100%; overflow: hidden; }
+  .mark-badge {
+    position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--overlay-bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10;
+    font-size: 22px; font-weight: 900;
+  }
+  .mark-badge.correct { color: #1F7A3A; border: 1px solid rgba(0,0,0,0.15); }
+  .mark-badge.wrong   { color: #A12727; border: 1px solid rgba(0,0,0,0.15); }
+  .mark-badge.missed  { color: #1F7A3A; opacity: 0.5; }
+  .result-badge-area {
+    height: 96px; background: rgba(26, 29, 36, 0.7);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .result-badge {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; font-weight: 900;
+    line-height: 1;
+  }
+  .result-badge.success { background: var(--result-success); color: var(--result-success-fg); }
+  .result-badge.danger  { background: var(--result-danger);  color: var(--result-danger-fg); }
+  .action-bar {
+    background: var(--bg-surface);
+    padding: 16px 16px 24px 16px;
+  }
+  .next-btn {
+    width: 100%; height: 64px;
+    background: var(--action-primary); color: white;
+    border: none; border-radius: 16px;
+    font-size: 22px; font-weight: 700;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    cursor: pointer;
+  }
+  .next-btn .countdown-md {
+    font-size: 26px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--countdown-normal);
+  }
+  .label-pc {
+    text-align: center; color: var(--fg-muted); font-size: 14px; margin: 16px 24px;
+  }
+  h2 {
+    text-align: center; font-size: 18px; color: var(--fg-muted); margin: 8px 0;
+  }
+  .pattern-defs { position: absolute; width: 0; height: 0; }
+  .note {
+    text-align:center; color:var(--fg-muted); font-size:14px;
+    max-width:900px; margin:24px auto; padding: 0 24px;
+  }
+</style>
+</head>
+<body>
+
+<div class="label-pc" style="grid-column: 1 / -1;">S22-RESULT-OVERLAY-PATTERN — F-10 結果オーバーレイ（v1.2、3×3 G-04 で例示。矩形クリッピング N=1.5、ResultBadge fg=深色）</div>
+
+<svg class="pattern-defs" aria-hidden="true">
+  <defs>
+    <pattern id="r-low" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+      <rect width="14" height="14" fill="#7a7a7a"/>
+      <rect width="7" height="14" fill="#909090"/>
+    </pattern>
+    <pattern id="r-high" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+      <rect width="14" height="14" fill="#404040"/>
+      <rect width="7" height="14" fill="#c0c0c0"/>
+    </pattern>
+    <radialGradient id="r-window" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#808080" stop-opacity="0"/>
+      <stop offset="70%"  stop-color="#808080" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#808080" stop-opacity="0.50"/>
+    </radialGradient>
+  </defs>
+</svg>
+
+<div class="container">
+
+  <!-- LEFT: Correct case -->
+  <div>
+    <h2>正解（試行全体総合 ✅）</h2>
+    <div class="device" role="region" aria-labelledby="result-overlay-title-1" aria-live="assertive">
+      <div class="statusbar">
+        <button class="close" aria-label="ゲームを中断">×</button>
+        <div class="countdown">0</div>
+        <div class="placeholder"></div>
+      </div>
+      <div class="grid-frame">
+        <!-- (0,0) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (0,1) high + correct -->
+        <div class="cell">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-high)"/>
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+          </g></svg>
+          <div class="mark-badge correct" aria-label="正解です">◯</div>
+        </div>
+        <!-- (0,2) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (1,0) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (1,1) high + correct -->
+        <div class="cell">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-high)"/>
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+          </g></svg>
+          <div class="mark-badge correct" aria-label="正解です">◯</div>
+        </div>
+        <!-- (1,2) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (2,0) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (2,1) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (2,2) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+      </div>
+      <div class="result-badge-area">
+        <div class="result-badge success" role="img" aria-label="正解です">✓</div>
+      </div>
+      <div class="action-bar">
+        <button class="next-btn">次へ <span class="countdown-md">8</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Wrong case -->
+  <div>
+    <h2>不正解（取りこぼし FN + 誤選択 FP + 総合 ❌）</h2>
+    <div class="device" role="region" aria-live="assertive">
+      <div class="statusbar">
+        <button class="close" aria-label="ゲームを中断">×</button>
+        <div class="countdown">0</div>
+        <div class="placeholder"></div>
+      </div>
+      <div class="grid-frame">
+        <!-- (0,0) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (0,1) high - missed (FN) -->
+        <div class="cell">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-high)"/>
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+          </g></svg>
+          <div class="mark-badge missed" aria-label="正解ですが選ばれませんでした">◯</div>
+        </div>
+        <!-- (0,2) low - wrongly selected (FP) -->
+        <div class="cell">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+          </g></svg>
+          <div class="mark-badge wrong" aria-label="不正解です">✕</div>
+        </div>
+        <!-- (1,0) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (1,1) high + correct -->
+        <div class="cell">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-high)"/>
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+          </g></svg>
+          <div class="mark-badge correct" aria-label="正解です">◯</div>
+        </div>
+        <!-- (1,2) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (2,0) low - wrongly selected (FP) -->
+        <div class="cell">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+            <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+          </g></svg>
+          <div class="mark-badge wrong" aria-label="不正解です">✕</div>
+        </div>
+        <!-- (2,1) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+        <!-- (2,2) low -->
+        <div class="cell"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-low)"/>
+          <rect x="-25" y="-25" width="150" height="150" fill="url(#r-window)"/>
+        </g></svg></div>
+      </div>
+      <div class="result-badge-area">
+        <div class="result-badge danger" role="img" aria-label="不正解です">✕</div>
+      </div>
+      <div class="action-bar">
+        <button class="next-btn">次へ <span class="countdown-md">8</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <p><strong>注釈</strong>：左は正解（TP=2、FP=0、FN=0）、右は不正解（TP=1、FP=2、FN=1）。各パッチ上の◯/✕は MarkBadge（components.md §24）、刺激領域直下の ✅/❌ は ResultBadge（components.md §28、v1.2 新規）。</p>
+  <p>ResultBadge：成功背景 #0A6238 + 白 ✓ で 7.45:1（AAA）、失敗背景 #A82018 + 白 ✕ で 7.28:1（AAA）達成。</p>
+  <p>カウントダウン「8」は CountdownTimer size=md。残り 5 秒で黄、3 秒で赤に変わる。</p>
+</div>
+
+</body>
+</html>

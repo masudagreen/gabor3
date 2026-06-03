@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>S22-DATA-RESET — F-17 起動時データリセット通知 (v1.2 拡張)</title>
+<style>
+  :root {
+    --bg-canvas: #0F1115;
+    --bg-surface: #1A1D24;
+    --fg-primary: #FFFFFF;
+    --fg-muted: #B7BCC9;
+    --fg-secondary: #DCE0E8;
+    --action-primary: #13449D;     /* token-aligned */
+    --border-default: #3A3F4A;
+    --overlay-bg: rgba(15, 17, 21, 0.85);
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-canvas);
+    color: var(--fg-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+    box-sizing: border-box;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  .device {
+    max-width: 375px; width: 100%; min-height: 667px;
+    margin: 24px auto;
+    background: var(--bg-canvas);
+    border-radius: 32px; overflow: hidden;
+    border: 1px solid #2A2D34;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .scrim {
+    position: absolute; inset: 0;
+    background: var(--overlay-bg);
+    backdrop-filter: blur(2px);
+  }
+  .modal {
+    position: relative;
+    width: calc(100% - 32px);
+    max-width: 340px;
+    background: var(--bg-surface);
+    border-radius: 24px;
+    padding: 28px 24px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    z-index: 1;
+  }
+  .title {
+    font-size: 26px; font-weight: 700;
+    margin: 0 0 16px 0;
+    text-align: center;
+  }
+  .body {
+    font-size: 22px;
+    color: var(--fg-secondary);
+    margin: 0 0 16px 0;
+  }
+  .note {
+    font-size: 18px;
+    color: var(--fg-muted);
+    margin: 0 0 24px 0;
+    padding: 12px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 12px;
+    border-left: 3px solid var(--action-primary);
+  }
+  .ok-btn {
+    width: 100%; height: 64px;
+    background: var(--action-primary);
+    color: #FFFFFF;
+    border: none; border-radius: 16px;
+    font-size: 22px; font-weight: 700;
+    cursor: pointer;
+  }
+  .ok-btn:focus-visible {
+    outline: 3px solid #FFFFFF;
+    outline-offset: 2px;
+  }
+  .label-pc {
+    text-align: center; color: var(--fg-muted); font-size: 14px; margin: 16px 24px;
+  }
+</style>
+</head>
+<body>
+
+<div class="label-pc">S22-DATA-RESET — F-17 起動時データリセット通知（v1.2 拡張：staircase / 単体プレイ履歴 / BadgeStatus リセット）</div>
+<div class="device" role="region" aria-label="データリセット通知画面">
+  <div class="scrim" aria-hidden="true"></div>
+  <div class="modal" role="alertdialog" aria-labelledby="reset-title" aria-describedby="reset-body">
+    <h1 class="title" id="reset-title">最新版へのアップデート</h1>
+    <p class="body" id="reset-body">
+      より良いトレーニングのため、過去のデータを一部リセットしました。<br/>
+      新しい 7 ゲームをお楽しみください。
+    </p>
+    <p class="note">
+      ※ staircase 値・単体プレイ履歴・バッジは新しい体系に合わせてリセットされます
+    </p>
+    <button class="ok-btn" aria-label="OK、新しい体系で開始">OK</button>
+  </div>
+</div>
+
+<div style="text-align:center; color:#B7BCC9; font-size:14px; max-width:600px; margin:16px auto; padding: 0 24px;">
+  <strong>v1.2 改訂点（A12 / A15 確定）：</strong> 旧「13 ゲーム」→「7 ゲーム」に文言更新。リセット対象を明示。削除フラグ <code>gaboreye:v1.2:dataResetNoticeShown=true</code>。エラー時は無音で v1.2 用キーを新規作成（ユーザー体験を中断しない）。
+</div>
+
+</body>
+</html>

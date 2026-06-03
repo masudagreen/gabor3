@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>S22-G04-PLAY — G-04 コントラスト弁別 (3×3 + 違い複数)</title>
+<style>
+  :root {
+    --bg-canvas: #0F1115;
+    --gabor-bg: #808080;
+    --fg-primary: #FFFFFF;
+    --fg-muted: #B7BCC9;
+    --countdown-normal: #FFFFFF;
+    --selection-subtle: rgba(220, 224, 232, 0.55);
+    --selection-idle: rgba(220, 224, 232, 0.30);
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-canvas);
+    color: var(--fg-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    box-sizing: border-box;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  .device {
+    max-width: 375px; width: 100%; min-height: 667px;
+    margin: 24px auto;
+    background: var(--gabor-bg);
+    border-radius: 32px; overflow: hidden;
+    border: 1px solid #2A2D34;
+    display: flex; flex-direction: column;
+  }
+  .statusbar {
+    height: 88px;
+    background: rgba(26, 29, 36, 0.85);
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 16px 16px 12px 16px;
+  }
+  .close { width: 48px; height: 48px; background: transparent; border: none; color: var(--fg-primary); font-size: 28px; }
+  .countdown { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fg-primary); }
+  .placeholder { width: 48px; }
+  .guide {
+    text-align: center;
+    background: rgba(26, 29, 36, 0.7);
+    padding: 12px 16px;
+    font-size: 22px;
+    font-weight: 500;
+  }
+  .grid-frame {
+    margin: 24px auto;
+    width: min(320px, calc(100% - 32px));
+    aspect-ratio: 1 / 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .cell {
+    background: var(--gabor-bg);
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 1px var(--selection-idle);
+    overflow: hidden;            /* 矩形クリッピング (NF-27/28) */
+    position: relative;
+    cursor: pointer;
+  }
+  .cell.selected {
+    box-shadow: inset 0 0 0 2px var(--selection-subtle);
+  }
+  .cell:focus-visible {
+    outline: 3px solid #FFFFFF;
+    outline-offset: 2px;
+  }
+  .cell svg { display: block; width: 100%; height: 100%; overflow: hidden; }
+  .label-pc {
+    text-align: center; color: var(--fg-muted); font-size: 14px; margin: 16px 24px;
+  }
+</style>
+</head>
+<body>
+
+<div class="label-pc">S22-G04-PLAY — G-04 コントラスト弁別（3×3 固定、違うパッチ複数ランダム、複数選択、TP+1/FP-1、矩形クリッピング N=1.5）</div>
+<div class="device" role="region" aria-label="G-04 コントラスト弁別 プレイ画面">
+  <div class="statusbar">
+    <button class="close" aria-label="ゲームを中断">×</button>
+    <div class="countdown" role="timer" aria-live="polite">47</div>
+    <div class="placeholder"></div>
+  </div>
+  <div class="guide" id="g04-guide">他と濃さが違うパッチをタップ</div>
+
+  <!-- shared patterns: low-contrast (base) と high-contrast (差分) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <pattern id="g04-low" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#7a7a7a"/>
+        <rect width="7" height="14" fill="#909090"/>
+      </pattern>
+      <pattern id="g04-high" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#404040"/>
+        <rect width="7" height="14" fill="#c0c0c0"/>
+      </pattern>
+      <radialGradient id="g04-window" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#808080" stop-opacity="0"/>
+        <stop offset="70%"  stop-color="#808080" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#808080" stop-opacity="0.50"/>
+      </radialGradient>
+    </defs>
+  </svg>
+
+  <div class="grid-frame" role="group" aria-describedby="g04-guide" aria-label="3×3 ガボールパッチ">
+    <!-- 9 cells; positions 1 (0,1) and 4 (1,1)=center are "different" (high contrast) -->
+    <!-- 矩形クリッピング: viewBox 0 0 100 100, 内部 rect は -25,-25 150x150 (1.5 倍) -->
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 1 行目 1 列目のガボール"
+         data-target-id="g04-cell-0-0">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-low)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-window)"/>
+      </g></svg>
+    </div>
+    <div class="cell selected" role="checkbox" aria-checked="true" tabindex="0"
+         aria-label="グリッド 1 行目 2 列目のガボール（選択中・正解候補）"
+         data-target-id="g04-cell-0-1">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-high)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-window)"/>
+      </g></svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 1 行目 3 列目のガボール"
+         data-target-id="g04-cell-0-2">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-low)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-window)"/>
+      </g></svg>
+    </div>
+
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 2 行目 1 列目のガボール"
+         data-target-id="g04-cell-1-0">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-low)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-window)"/>
+      </g></svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 2 行目 2 列目のガボール（正解候補）"
+         data-target-id="g04-cell-1-1">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-high)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-window)"/>
+      </g></svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 2 行目 3 列目のガボール"
+         data-target-id="g04-cell-1-2">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-low)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-window)"/>
+      </g></svg>
+    </div>
+
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 3 行目 1 列目のガボール"
+         data-target-id="g04-cell-2-0">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-low)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-window)"/>
+      </g></svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 3 行目 2 列目のガボール"
+         data-target-id="g04-cell-2-1">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-low)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-window)"/>
+      </g></svg>
+    </div>
+    <div class="cell" role="checkbox" aria-checked="false" tabindex="0"
+         aria-label="グリッド 3 行目 3 列目のガボール"
+         data-target-id="g04-cell-2-2">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"><g transform="rotate(20 50 50)">
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-low)"/>
+        <rect x="-25" y="-25" width="150" height="150" fill="url(#g04-window)"/>
+      </g></svg>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sprint 22 mockups — GaborEye v1.2</title>
+<style>
+  body {
+    background: #0F1115; color: #FFFFFF;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    margin: 0; padding: 32px;
+    line-height: 1.6;
+  }
+  h1 { font-size: 28px; }
+  h2 { font-size: 22px; margin-top: 32px; color: #DCE0E8; }
+  ul { padding-left: 20px; }
+  li { margin: 8px 0; }
+  a {
+    color: #67A8FF; text-decoration: none;
+    font-size: 18px;
+  }
+  a:hover { text-decoration: underline; }
+  .desc { color: #B7BCC9; font-size: 16px; }
+  .container { max-width: 800px; margin: 0 auto; }
+  .new {
+    background: #13449D; color: #FFFFFF;
+    font-size: 12px; padding: 2px 8px; border-radius: 4px;
+    margin-left: 8px; vertical-align: middle;
+  }
+  .amend {
+    background: #FF8A82; color: #1A1D24;
+    font-size: 12px; padding: 2px 8px; border-radius: 4px;
+    margin-left: 8px; vertical-align: middle; font-weight: 700;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Sprint 22 mockups — GaborEye v1.2</h1>
+<p class="desc">v1.2 改訂のスタンドアロン HTML モックアップ集。Playwright で開いて視覚確認・スクリーンショット取得用。<br/>
+<strong>v1.2 amendment 適用済</strong>：矩形クリッピング N=1.5、countdown.danger #FF8A82 (7:1)、ResultBadge fg 深色 (AAA)、action.primary #13449D 統一、a11y 完備、レスポンシブ対応。</p>
+
+<h2>1. 起動・距離リマインド</h2>
+<ul>
+  <li><a href="01-launch-distance.html">01-launch-distance.html</a> — F-16 距離リマインド（3 秒・最初から赤）<span class="amend">amend</span></li>
+</ul>
+
+<h2>2. カウントダウン UI 統一仕様</h2>
+<ul>
+  <li><a href="02-countdown-pattern.html">02-countdown-pattern.html</a> — 通常（白）/ ≤5 秒（黄）/ ≤3 秒（赤・Black 900）の 3 段階遷移サンプル<span class="amend">amend</span></li>
+</ul>
+
+<h2>3. ゲームプレイ画面（v1.2 改訂）</h2>
+<ul>
+  <li><a href="03-g01-rotation.html">03-g01-rotation.html</a> — G-01 ゆっくり回転検出（3×3、回転 1〜3 個ランダム、両方向）<span class="amend">amend</span></li>
+  <li><a href="04-g04-3x3-grid.html">04-g04-3x3-grid.html</a> — G-04 コントラスト弁別（3×3、違うパッチ複数、複数選択）。G-05 / G-06 も同構造<span class="amend">amend</span></li>
+  <li><a href="05-g07-4x4-grid.html">05-g07-4x4-grid.html</a> — G-07 ガボール向き同定（4×4 維持、同じ向き 2〜5 個ランダム）<span class="amend">amend</span></li>
+  <li><a href="06-g13-70-30-layout.html">06-g13-70-30-layout.html</a> — G-13 数字探し（上 70% 刺激 / 下 30% keypad）<span class="amend">amend</span></li>
+  <li><a href="09-g03-perimeter.html">09-g03-perimeter.html</a> — G-03 周辺視野ハント（中央線方式廃止 / 円周 8 ガボール / 単一選択）<span class="new">new</span></li>
+</ul>
+
+<h2>4. 結果オーバーレイ（v1.2 改訂）</h2>
+<ul>
+  <li><a href="08-result-overlay.html">08-result-overlay.html</a> — 正解（✅）/ 不正解（❌）パターン。パッチ上 ◯/✕ + 試行全体 ✅/❌<span class="amend">amend</span></li>
+</ul>
+
+<h2>5. 連続プレイ事後画面（v1.2 新規）</h2>
+<ul>
+  <li><a href="07-postsession.html">07-postsession.html</a> — F-21 連続プレイ事後画面（ホーム的役割）<span class="amend">amend</span></li>
+</ul>
+
+<h2>6. システム画面（v1.2 改訂）</h2>
+<ul>
+  <li><a href="10-data-reset.html">10-data-reset.html</a> — F-17 起動時データリセット通知（v1.2 文言・拡張版）<span class="new">new</span></li>
+  <li><a href="11-cooldown.html">11-cooldown.html</a> — F-15 クールダウン 10 秒（カウントダウン UI 統一適用）<span class="new">new</span></li>
+</ul>
+
+<h2>参考</h2>
+<ul style="color: #B7BCC9; font-size: 16px;">
+  <li>spec：<code>docs/spec-v11.md</code> (v1.2)</li>
+  <li>確定回答：<code>docs/questions-v12.md</code> A0〜A15</li>
+  <li>デザインシステム：<code>docs/design-v11/system.md</code> §1.9〜§1.20</li>
+  <li>コンポーネント：<code>docs/design-v11/components.md</code> §26〜§35</li>
+  <li>screens：<code>docs/design-v11/sprints/sprint-22/screens.md</code></li>
+  <li>amendment 評価レポート：<code>docs/evaluations/design-qa-v12-20260510-1353.md</code></li>
+</ul>
+</div>
+</body>
+</html>

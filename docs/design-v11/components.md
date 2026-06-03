@@ -1085,3 +1085,536 @@ type MarkBadgeProps = {
 ### 単数選択ゲームの `correctMissed` 不使用ポリシー（v1.1.1 から継続）
 - 単数選択ゲーム（G-02 / G-03 / G-04 / G-05 / G-06 / G-08 / G-09 / G-10 / G-11 / G-12 / G-13）では「正解で選ばれなかった」状態は実質「正解 = ◯」表示で十分なため、**`correctMissed`（薄 ◯）ではなく `correctChosen` 同等の通常 ◯ を採用**する
 - `correctMissed`（薄 ◯）は複数選択ゲーム G-01 / G-07 のみで使用（取りこぼし表現）
+
+---
+
+## 26. v1.2 改訂による §25 marks 生成ロジック上書き（最新）
+
+v1.2 では 13 ゲーム → 7 ゲームに絞り込み、複数選択ゲームの構造を「3×3 グリッド + 違うパッチ複数ランダム」に統一。本節は §25 を上書きする。
+
+| ゲーム | v1.2 後の選択肢タイプ | 選択方式 | marks 生成ロジック | ◯/✕ 重畳位置 |
+|---|---|---|---|---|
+| **G-01 ゆっくり回転検出**（複数選択、3×3 固定） | 9 個のセル（ImageChoiceCell × 9） | multi | 「回転していたパッチ」全件に `correctChosen`（選択あり）or `correctMissed`（選択なし）、「ユーザーが選んだが回転していなかったパッチ」に `wrongChosen` | 各セル中央 |
+| **G-03 周辺視野ハント**（単一選択、円周 8 個） | 8 個のセル（ImageChoiceCell × 8） | single | odd one 位置に `correctChosen`、誤選択位置に `wrongChosen`。中央線方式は **v1.2 で廃止**（A10 確定） | 円周上のガボールパッチ中央 |
+| **G-04 / G-05 / G-06**（複数選択、3×3 固定） | 9 個のセル（ImageChoiceCell × 9） | multi | 違うパッチ全件に `correctChosen` or `correctMissed`、「ユーザーが選んだが違わなかったパッチ」に `wrongChosen` | 各セル中央 |
+| **G-07 ガボール向き同定**（複数選択、4×4 維持） | 16 個のセル（ImageChoiceCell × 16） | multi | 「向きが揃ったアイテム」全件に `correctChosen` or `correctMissed`、誤選択に `wrongChosen` | 各セル中央 |
+| **G-13 数字探し**（単一選択、keypad-10） | 10 個のキーパッドボタン | single | 正解数字キーに `correctChosen`、誤選択数字キーに `wrongChosen`（最大 2 個） | キーパッドのキー上 |
+
+### 26.1 v1.2 で削除されるエントリ
+- G-02 / G-08 / G-09 / G-10 / G-11 / G-12 の marks 生成ロジック行は完全削除（コードと共に）
+
+### 26.2 v1.2 改訂後の `correctMissed` 使用ゲーム
+- **複数選択ゲーム**：G-01 / G-04 / G-05 / G-06 / G-07 の 5 ゲーム
+- **単一選択ゲーム**：G-03 / G-13 の 2 ゲーム（`correctMissed` は使わない）
+
+### 26.3 試行全体総合 ✅/❌（ResultBadge、§28 で詳述）
+- 7 ゲーム全てで、刺激領域直下に「試行全体の総合 ✅（緑）/ ❌（赤）」を 1 個表示する
+- 複数選択ゲームでは、各パッチ上の個別 ◯/✕（MarkBadge）と併用
+- 単一選択ゲームでは、パッチ上の ◯/✕（MarkBadge）+ 刺激領域直下の総合 ✅/❌（ResultBadge）を併用
+- 総合判定：複数選択ゲームは「TP - FP > 0 なら ✅」、単一選択ゲームは「正解パッチ選択なら ✅」
+
+---
+
+## 27. `CountdownTimer`（CD-1、v1.2 新規・最重要）
+
+F-07（ゲーム時間 60 秒）・F-15（クールダウン 10 秒）・F-16（距離リマインド 3 秒）・F-10（結果オーバーレイ 10 秒）の 4 箇所で共通利用するカウントダウン表示。system.md §1.11 の規範を実装する。
+
+### API
+
+```ts
+type CountdownTimerProps = {
+  remainingSeconds: number;          // 整数秒（0 以上）
+  totalSeconds: number;              // 開始秒数（color thresholds 算出用）
+  size: "sm" | "md" | "lg" | "xl";   // サイズプリセット
+  ariaPrefix?: string;               // SR 読み上げ用プレフィックス（例：「残り」）
+  onTick?: (sec: number) => void;    // 毎秒コールバック（音再生 / haptics 連携用）
+  onComplete?: () => void;           // 0 到達時 1 回コール
+  reducedMotion?: boolean;           // prefers-reduced-motion 時にアニメーション抑制
+};
+```
+
+### サイズプリセット
+
+| size | font-size | weight | 用途 |
+|---|---|---|---|
+| `sm` | font.body 24px | Bold 700 | （予約、未使用） |
+| `md` | font.h3 26px | Bold 700 | F-10 結果オーバーレイ「次へ」ボタン内 |
+| `lg` | font.h2 30px | Bold 700 | F-07 GameStatusBarV12 中央 |
+| `xl` | font.numeric.xl 72px | Bold→Black | F-15 クールダウン / F-16 距離リマインド |
+
+### 段階色ロジック
+
+```ts
+function getColor(remaining: number): { color: string; weight: number } {
+  if (remaining <= 3) return { color: "color.countdown.danger", weight: 900 };  // Black
+  if (remaining <= 5) return { color: "color.countdown.warn",   weight: 700 };  // Bold
+  return                  { color: "color.countdown.normal", weight: 700 };     // Bold
+}
+```
+
+- **色変化のタイミング**：残り 5 秒に切り替わる瞬間に warn、残り 3 秒に切り替わる瞬間に danger
+- **太字化補強**：色だけでなく weight も Bold 700 → Black 900 に切り替え（NF-12 配慮）
+- **点滅禁止**（NF-11、補強は太字化のみ）
+- **サイズ拡大なし**：ジャンプを避けるため、サイズは常にプリセット内で固定
+
+### 描画
+
+```
+通常時:                        ≤5 秒:                       ≤3 秒:
+┌──────────┐                  ┌──────────┐                ┌──────────┐
+│   47     │                  │    5     │                │    3     │
+└──────────┘                  └──────────┘                └──────────┘
+weight: Bold 700              weight: Bold 700             weight: Black 900
+color: white                  color: warn yellow           color: danger red
+```
+
+### 音 / ハプティクス連携
+
+- `onTick` を毎秒呼ぶ。Generator はこの中で残り秒数を判定し、`AudioController.play("tick")` を発火（残り 3 / 2 / 1 秒のみ）
+- カウントダウン色変化と音発火は同期（≤3 秒の赤転換と同時にティック開始）
+- ゲーム終了時（0 到達）に `onComplete` を呼ぶ。Generator はここで「ゲーム終了音」を発火
+
+### a11y
+
+- `<span role="timer" aria-live={remaining <= 5 ? "assertive" : "polite"} aria-atomic="true">{remaining}</span>`
+- `aria-label`：`{ariaPrefix} {remaining} 秒`
+- 残り 3 秒以下では毎秒 SR 読み上げ
+- tabular-nums フォントで桁数固定（数字位置のジャンプ防止）
+
+### Generator 実装ノート
+
+- React Native では `<Text>` + `font-variant: tabular-nums` 相当の指定が必要
+- Web ではフォントを Inter Variable または system-ui の tabular-nums 対応バリアントを使用
+- `prefers-reduced-motion: reduce` 時はアニメーション全廃（色変化はそのまま、点滅・拡大なし）
+
+### 利用箇所別の引数例
+
+```ts
+// F-07 ゲーム時間
+<CountdownTimer
+  remainingSeconds={47}
+  totalSeconds={60}
+  size="lg"
+  ariaPrefix="残り"
+  onTick={(s) => audioController.tickIfNeeded(s)}
+  onComplete={() => audioController.play("gameEnd")}
+/>
+
+// F-16 距離リマインド
+<CountdownTimer
+  remainingSeconds={3}
+  totalSeconds={3}
+  size="xl"
+  ariaPrefix="開始まで"
+  onTick={(s) => audioController.tickIfNeeded(s)}
+/>
+
+// F-10 結果オーバーレイ
+<CountdownTimer
+  remainingSeconds={10}
+  totalSeconds={10}
+  size="md"
+  ariaPrefix="次のゲームまで"
+  onTick={(s) => audioController.tickIfNeeded(s)}
+/>
+```
+
+---
+
+## 28. `ResultBadge`（RB-1、v1.2 新規・最重要）
+
+刺激領域直下に表示する「試行全体の総合 ✅/❌」を 1 個。F-10 結果オーバーレイの一部として使う。複数選択ゲームでは MarkBadge（個別パッチ）と併用、単一選択ゲームでも併用（重複ではなく補強：パッチ上 ◯/✕ + 全体 ✅/❌）。
+
+### API
+
+```ts
+type ResultBadgeProps = {
+  isCorrect: boolean;                 // true: ✅（緑）、false: ❌（赤）
+  size: "md" | "lg";                  // md=64px, lg=80px
+  ariaLabel: string;                  // SR 読み上げ「正解です」/「不正解です」
+};
+```
+
+### サイズプリセット
+
+| size | アイコン直径 | 用途 |
+|---|---|---|
+| `md` | 64px | スマホ縦の刺激領域直下 |
+| `lg` | 80px | PC 横 / 大画面 |
+
+### 描画仕様
+
+#### `isCorrect=true`（✅、緑）
+- 形状：円形塗りつぶし背景 + 中央に**白**の ✓ アイコン
+- 円形背景色：`color.result.aggregate.success`（v1.2 amendment で 7:1 確保のため値更新）
+  - **新値：`#0A6238`（暗緑、ライト時） / `#3FCB7E`（明緑、ダーク時、※ ✓ は黒に切替）**
+  - 旧値：`#22A862` ライト時 → 白文字とのコントラスト 3.07:1（AA すら未達）のため amendment で更新
+- ✓ アイコン色：
+  - ライトテーマ（暗緑背景）：`#FFFFFF`、コントラスト **7.45:1（AAA 達成）**
+  - ダークテーマ（明緑背景 #3FCB7E）：`#000000`、コントラスト **10.05:1（AAA 達成）**
+- ✓ アイコンサイズ：背景直径 × 0.6
+- ✓ 線幅：背景直径 × 0.10（最小 4px、`stroke-linecap: round`、`stroke-linejoin: round`）
+
+#### `isCorrect=false`（❌、赤）
+- 形状：円形塗りつぶし背景 + 中央に**白**の ✕ アイコン
+- 円形背景色：`color.result.aggregate.danger`（v1.2 amendment で 7:1 確保のため値更新）
+  - **新値：`#A82018`（暗赤、ライト時） / `#FF6E73`（明赤、ダーク時、※ ✕ は黒に切替）**
+  - 旧値：`#D8323A` ライト時 → 白文字とのコントラスト 4.62:1（AA は通過、AAA 未達）のため amendment で更新
+- ✕ アイコン色：
+  - ライトテーマ（暗赤背景）：`#FFFFFF`、コントラスト **7.28:1（AAA 達成）**
+  - ダークテーマ（明赤背景 #FF6E73）：`#000000`、コントラスト **7.73:1（AAA 達成）**
+- ✕ アイコンサイズ：背景直径 × 0.5
+- ✕ 線幅：背景直径 × 0.10（最小 4px、`stroke-linecap: round`）
+
+### MarkBadge との違い
+
+| | MarkBadge（MK-1） | ResultBadge（RB-1） |
+|---|---|---|
+| 配置 | 刺激領域内のパッチ／象限の上に重畳（z-index 10） | 刺激領域の外、直下に独立配置（z-index 20） |
+| サイズ | セル直径 × 0.35（24〜80px の範囲） | 64px or 80px 固定 |
+| 形状 | 円形 outline（半透明白背景に縞模様越しの ◯/✕） | 円形 filled（不透明塗りつぶし） |
+| 透過度 | 半透明背景 82%（縞模様を完全には隠さない） | 不透明（注視訓練後の明確な表示） |
+| 用途 | パッチ単位の正誤を空間対応で示す | 試行全体の正誤を 1 目で示す |
+
+### 配置（system.md §1.11.3 と整合）
+
+```
+┌──────────────────────────────┐
+│  ✕   残り 0 秒                │ ← GameStatusBarV12
+├──────────────────────────────┤
+│                              │
+│  [ 刺激領域：パッチ + ◯/✕ ]   │ ← MarkBadge × N（パッチ上）
+│                              │
+├──────────────────────────────┤
+│            ✅                │ ← ResultBadge size=md（中央配置）
+├──────────────────────────────┤
+│  ┌────────────────────────┐ │
+│  │   次へ          ⏱ 8     │ │ ← CountdownTimer + 「次へ」
+│  └────────────────────────┘ │
+└──────────────────────────────┘
+```
+
+- ResultBadge は刺激領域とアクションバーの間に独立した行として配置
+- 高さ：md=80px、lg=96px（バッジ + 上下 padding）
+- 中央配置
+
+### a11y
+
+- `role="img"`, `aria-label={ariaLabel}` (例: "正解です" / "不正解です")
+- フォーカス可能でない（装飾扱い、SR は ResultOverlay 全体の `aria-live` で読み上げ）
+- アニメーションなし（フェードインは ResultOverlay 全体の 200ms に乗る）
+
+### Generator 実装ノート
+
+- SVG 描画推奨（`<svg>` + `<circle>` + `<path>` for ✓ or ✕）
+- React Native では `react-native-svg` を使用
+- 単純な角丸 box + 絵文字 ✅/❌ で代替する場合、絵文字レンダリングの一貫性問題があるため SVG 推奨
+
+### 旧 §10 / §11 との関係
+
+- 旧 v1.1.1 仕様の F-10 結果オーバーレイは「✅/❌ の総合表示」を持っていなかった（パッチ上 ◯/✕ のみ）
+- v1.2 では spec A5 確定により「パッチ欄直下に総合 ✅/❌ 1 個」を追加。これが ResultBadge
+
+---
+
+## 29. `AppIcon` アセット仕様（AI-1、v1.2 新規）
+
+system.md §1.16 の規範に対応するアセット仕様。コードとしてのコンポーネントではなく、画像ファイルとビルド設定の規範。
+
+### アセットファイル一覧
+
+```
+assets/
+├─ icon.png                         (1024×1024, iOS / 共通マスター)
+├─ adaptive-icon-foreground.png    (1024×1024, Android adaptive 前景)
+├─ adaptive-icon-background.png    (1024×1024, Android adaptive 背景、単色 #1A1D24)
+├─ favicon.png                     (196×196, Web)
+├─ pwa-192.png                     (192×192)
+├─ pwa-512.png                     (512×512)
+├─ splash-icon.png                 (1024×1024, Expo splash)
+└─ icon-source.svg                 (原画 SVG、編集用マスター)
+```
+
+### `app.json` / `app.config.ts` 設定例
+
+```json
+{
+  "expo": {
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "backgroundColor": "#1A1D24",
+      "resizeMode": "contain"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "backgroundColor": "#1A1D24"
+      },
+      "icon": "./assets/icon.png"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
+```
+
+### 図柄定義（system.md §1.16.1 を再掲）
+
+- 基本図柄：ガボールパッチを **45°（左下→右上、時計回り 45°）** に固定
+- コントラスト 0.7〜0.8、暗背景 #1A1D24、パッチサイズはマスター 80%（820px 角）
+- 受け入れ基準：全プラットフォーム（iOS / Android adaptive / Android legacy / Web favicon / PWA / Expo splash）で確認
+
+### Generator 実装ノート
+
+- 原画 SVG を作り、Sharp 等で各サイズに書き出すスクリプトを `scripts/generate-icons.ts` 等に置くと再生成しやすい
+- もしくは直接 1024×1024 PNG を 1 つマスターとして書き出し、Expo の自動派生に任せる（iOS は OS が自動でダウンサンプル）
+- Android adaptive の foreground / background を別ファイルにする必要がある点に注意
+
+---
+
+## 30. `SoundHapticsToggle`（SH-1、v1.2 新規）
+
+設定画面（F-14）で使う、音と振動を個別 ON/OFF するトグル。
+
+### API
+
+```ts
+type SoundHapticsToggleProps = {
+  soundEnabled: boolean;
+  hapticsEnabled: boolean;
+  onChangeSound: (enabled: boolean) => void;
+  onChangeHaptics: (enabled: boolean) => void;
+};
+```
+
+### レイアウト
+
+```
+┌───────────────────────────────────┐
+│  音                                │ ← font.body.lg 26px Medium
+│  正解時・カウントダウン等          │ ← font.body 24px、color.fg.muted
+│                       [    ON   ] │ ← Toggle（v1 既存）
+├───────────────────────────────────┤
+│  振動（ハプティクス）               │ ← font.body.lg 26px Medium
+│  正解時・バッジ獲得時              │ ← font.body 24px、color.fg.muted
+│                       [    OFF  ] │ ← Toggle（v1 既存）
+└───────────────────────────────────┘
+```
+
+### 仕様
+
+- 各行 80px 高（ListItem v1 準拠 + サブテキスト分の追加高さ）
+- Toggle は v1 既存コンポーネント
+- 各トグルは独立。音 ON / 振動 OFF のような組み合わせも可能
+- サイレントモード時の挙動は説明不要（NF-33 で内部処理）
+
+### a11y
+
+- 各 Toggle に `role="switch"`, `aria-checked={enabled}`, `aria-label="効果音を有効化"` / `"振動を有効化"`
+- 音と振動の説明テキストは `aria-describedby` で関連付け
+
+### 配置（settings 画面）
+
+- 設定画面リストの上部 2 項目（v1.1 では 1 項目「効果音」だったが、v1.2 で 2 項目に分割）
+
+---
+
+## 31. `SafeAreaWrapper`（SA-1、v1.2 新規）
+
+ゲーム以外の全画面で必ず使うラッパー。system.md §1.14 の規範を実装する。
+
+### API
+
+```ts
+type SafeAreaWrapperProps = {
+  mode: "default" | "game";    // game 時は top inset を無視（ステータスバー領域も使用）
+  children: ReactNode;
+  backgroundColor?: string;     // 省略時は color.bg.canvas
+};
+```
+
+### 動作
+
+| `mode` | 適用 inset |
+|---|---|
+| `"default"` | top + bottom + left + right すべて適用（全コンテンツがセーフエリア内） |
+| `"game"` | bottom + left + right のみ適用（top inset は背景のみ広がり、UI 要素はセーフエリア内） |
+
+### Generator 実装ノート
+
+- React Native：`react-native-safe-area-context` の `useSafeAreaInsets()` を使う
+- Web：CSS `env(safe-area-inset-top/right/bottom/left)` + `viewport-fit=cover` の meta タグ
+- iOS / Android で同一 API を使うため、Expo の `expo-status-bar` と組み合わせる
+
+### 利用箇所
+
+| 画面 | mode |
+|---|---|
+| F-01 オンボーディング全画面 | `default` |
+| F-15 クールダウン | `default` |
+| F-16 距離リマインド | `default` |
+| F-21 連続プレイ事後画面 | `default` |
+| 設定画面 | `default` |
+| 進捗グラフ | `default` |
+| バッジ一覧 | `default` |
+| **ゲーム画面（G-01〜G-13）** | `game`（ステータスバー領域も背景に使用） |
+
+### a11y
+
+- ラッパー自体は role なし（透明な構造要素）
+- 子要素にすべての a11y 属性を委譲
+
+---
+
+## 32. `PostSessionScreen`（PS-1、v1.2 新規・最重要）
+
+F-21 連続プレイ事後画面のレイアウトコンテナ。system.md §1.10 の規範を実装する。
+
+### API
+
+```ts
+type PostSessionScreenProps = {
+  wideScore: number;                // 0-100
+  streakDays: number;
+  gameResults: Array<{
+    gameId: GameId;                 // "G-01" / "G-03" / ... / "G-13"
+    nameJa: string;                 // "回転検出" など
+    isCorrect: boolean;             // ✅ or ❌
+    threshold: { value: string; unit: string };  // 例：「3.5°/s」
+  }>;
+  onPressProgress: () => void;      // 進捗グラフへ
+  onPressBadges: () => void;        // バッジ一覧へ
+  onPressSettings: () => void;      // 設定へ
+};
+```
+
+### レイアウト
+
+system.md §1.10.1 の構造に従う。
+
+#### スマホ縦（375）
+- 上部：ロゴ + 設定 IconButton（高 56px）
+- ワイドスコア表示：「今日のスコア」label + 大きな数値（72px Bold tabular-nums）+ 「/100」
+- ストリーク：🔥 アイコン + 日数（24px Medium）
+- セパレータ + section title「各ゲームの結果」
+- 7 ゲーム結果 list（各行 72px 高、左ゲーム名 / 中央 ✅❌ / 右閾値）
+- 入口ボタン 3 つ：📊 進捗グラフ（Primary）/ 🏅 バッジ（Secondary）/ ⚙ 設定（Tertiary）、各 64px 高
+
+#### PC 横（1280）
+- 中央寄せ最大幅 720px
+- 7 ゲーム結果は 2 列グリッド（各 4 / 3 行）に展開可
+- 入口ボタンは横並び 3 列
+
+### SafeAreaWrapper 連携
+- 必ず `<SafeAreaWrapper mode="default">` でラップ
+
+### a11y
+- `role="region"`, `aria-labelledby="postsession-title"`
+- ワイドスコアは `aria-label="今日のワイドスコアは {n} 点（100 点満点）"`
+- 各ゲーム行は `role="listitem"`、ゲーム名 + 正誤 + 閾値を 1 つの aria-label に統合
+- 入口ボタンは `aria-label` 必須
+
+### Generator 実装ノート
+
+- Sprint 22 で新設。F-04 ホーム廃止に伴う代替画面
+- アプリを閉じて再起動した場合、再び F-16 距離リマインドから始まる（F-21 は前回セッション完了状態の表示用）
+- 「もう一度プレイ」ボタンは設けない（spec F-21 受け入れ基準：1 日 1 周設計）
+
+---
+
+## 33. `GameStatusBarV12`（GD-2、v1.2 新規）
+
+`GameStatusBarV11`（GD-1）のフルスクリーン対応版。ゲーム画面（NF-29 フルスクリーン許容）でステータスバー領域も使用する場合に top inset 込みで描画する。
+
+### API
+
+```ts
+type GameStatusBarV12Props = {
+  remainingSeconds: number;
+  totalSeconds: number;             // CountdownTimer に渡す
+  onAbort: () => void;
+  topInsetPx?: number;              // SafeAreaWrapper mode="game" 時に渡される top inset
+};
+```
+
+### 仕様
+
+- 高さ：64px + topInsetPx（top inset 分だけ高さ拡張）
+- 上端から topInsetPx だけ余白を取り、その下に `GameStatusBarV11` 相当の UI を配置
+- 背景色：`color.bg.surface`（80% 不透明、ステータスバー領域と滑らかに接続）
+- 左：✕ IconButton lg（48pt タップ領域、`aria-label="ゲームを中断"`）
+- 中央：CountdownTimer（CD-1、size="lg"、F-07 用）
+- 右：何も置かない
+- v1.1 の clock アイコン併用は v1.2 で完全撤去（CountdownTimer のみで段階表現）
+
+### 旧 GameStatusBarV11 との互換性
+
+- API 互換性：GameStatusBarV12 は GameStatusBarV11 のスーパーセット（topInsetPx だけ追加）
+- 既存の v1.1 コードは GameStatusBarV12 への置き換えで動作する
+- topInsetPx が 0 / undefined の場合、GameStatusBarV11 と同じ挙動
+
+### a11y
+
+- `role="banner"`、`aria-label="ゲームステータス"`
+- 中央のカウントダウンは CountdownTimer の a11y を継承
+
+---
+
+## 34. v1.2 で削除される v1.1 コンポーネント（一覧）
+
+v1.2 改訂で完全削除：
+
+| ID | 名称 | 削除理由 |
+|---|---|---|
+| HM-1 | `HomeHeroCTA` | F-04 ホーム廃止 |
+| HM-2 | `HomeNavGrid` | F-04 ホーム廃止 |
+| FT-1 | `SinglePlayPostFooter` | F-06 単体プレイ廃止 |
+| GE-02 | `SideBySideStimulus` | G-02 削除 |
+| GE-08 | `TiltAftereffectStimulus` | G-08 削除 |
+| GE-09 | `LateralMaskingStimulus` | G-09 リリース対象外 |
+| GE-10 | `TextureSegmentationStimulus` | G-10 リリース対象外 |
+| GE-11 | `VernierStimulus` | G-11 リリース対象外 |
+| GE-12 | `CrowdingStimulus` | G-12 リリース対象外 |
+
+### 削除されるが API は残す
+
+- `MetricCard`（MC-1）：ResultOverlay からは使わないが、F-11 進捗グラフ等で再利用される可能性のため定義は残す
+- `ResultSummaryV11`（RS-1）：v1.1.1 で既に独立画面用途は撤去済み（記録目的でのみ残存）
+
+### 改訂されるコンポーネント
+
+- `GameStatusBarV11` → `GameStatusBarV12`（top inset 対応、§33）
+- `AnswerChoiceGroup`（AC-1）：v1.2 で利用先は `keypad-10`（G-13）と `vertical-list`（オンボーディング）のみ。`horizontal-2` / `horizontal-4` / `clock-8` / `grid-4` は実質未使用
+- `ProgressGraphTabs`（TB-1）：13 タブ → 7 タブ（G-01 / G-03 / G-04 / G-05 / G-06 / G-07 / G-13）
+- `GameSubTabsScroll`（TB-2）：13 ゲーム → 7 ゲームのみ表示
+
+---
+
+## 35. v1.2 Generator 実装ガイド（追加）
+
+§19 を v1.2 用に拡張する。
+
+### 35.1 必須
+
+- ゲーム画面（G-01 / G-03 / G-04 / G-05 / G-06 / G-07 / G-13）は `<SafeAreaWrapper mode="game">` でラップする
+- 非ゲーム画面（F-01 / F-15 / F-16 / F-21 / 設定 / 進捗 / バッジ）は `<SafeAreaWrapper mode="default">` でラップする
+- カウントダウンは `<CountdownTimer>` を経由する（直接 `<Text>{remaining}</Text>` を書かない）
+- F-10 結果オーバーレイの試行全体総合 ✅/❌ は `<ResultBadge>` を使う（個別 MarkBadge とは別）
+- 設定画面の音・振動トグルは `<SoundHapticsToggle>` を使う
+- F-21 事後画面は `<PostSessionScreen>` を使う
+
+### 35.2 してはいけない
+
+- `HomeHeroCTA` / `HomeNavGrid` / `SinglePlayPostFooter` を新規呼び出ししない（v1.2 で完全廃止）
+- G-02 / G-08 / G-09〜G-12 関連のコンポーネント（GE-02 / GE-08 / GE-09 / GE-10 / GE-11 / GE-12）を新規呼び出ししない（v1.2 で完全削除）
+- カウントダウン色を直接ハードコードしない（`color.countdown.normal/.warn/.danger` トークン経由）
+- ガボール描画で N=1.0（パッチサイズ = 表示サイズ）を使わない（NF-27 / NF-28 違反、N=1.5 推奨）
+- アプリアイコンを差し替えずに v1.2 リリースしない（F-20 必須）
+
+### 35.3 リファレンス実装
+
+- `../rapidreading2/src/platform/audio.ts` の `playSound` / `triggerHaptics` 抽象を流用（F-19）
+- `react-native-safe-area-context` の `useSafeAreaInsets` で safe area 取得
+- `expo-haptics` の API でハプティクス発火

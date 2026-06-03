@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>S22-DISTANCE — F-16 距離リマインド (v1.2)</title>
+<style>
+  :root {
+    --bg-canvas: #0F1115;
+    --bg-surface: #1A1D24;
+    --fg-primary: #FFFFFF;
+    --fg-muted: #B7BCC9;
+    --countdown-normal: #FFFFFF;
+    --countdown-warn: #FFD600;
+    --countdown-danger: #FF8A82; /* v1.2 amendment: 7.0:1 on #1A1D24 */
+    --action-primary: #13449D;   /* v1.2 amendment: token-aligned */
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-canvas);
+    color: var(--fg-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    font-size: 24px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .device {
+    max-width: 375px; width: 100%; min-height: 667px;
+    margin: 24px auto;
+    background: var(--bg-canvas);
+    border-radius: 32px; overflow: hidden;
+    border: 1px solid #2A2D34;
+    position: relative;
+    box-sizing: border-box;
+  }
+  .inner {
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
+    box-sizing: border-box;
+    min-height: 667px;
+    position: relative;
+  }
+  .top-close {
+    position: absolute; top: 16px; left: 16px;
+    width: 48px; height: 48px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; color: var(--fg-primary);
+    font-size: 32px;
+  }
+  .center {
+    padding: 80px 24px 24px 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 24px;
+    box-sizing: border-box;
+  }
+  .headline {
+    font-size: 32px; font-weight: 700; text-align: center; line-height: 1.4; margin: 0;
+  }
+  .illustration {
+    width: 200px; height: 120px; max-width: 100%;
+    background: var(--bg-surface);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--fg-muted); font-size: 18px;
+  }
+  .countdown-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    margin-top: 32px;
+  }
+  .countdown {
+    font-size: 72px; font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    color: var(--countdown-danger);
+    line-height: 1; letter-spacing: -0.04em;
+    background: var(--bg-surface);
+    border-radius: 24px;
+    padding: 24px 40px;
+    min-width: 100px; text-align: center;
+  }
+  .auto-text { font-size: 22px; color: var(--fg-muted); }
+  .label-pc {
+    text-align: center; color: var(--fg-muted); font-size: 14px; margin: 16px 24px;
+  }
+</style>
+</head>
+<body>
+
+<div class="label-pc">S22-DISTANCE — F-16 距離リマインド (3 秒・最初から赤・太字補強)</div>
+<div class="device" role="region" aria-label="距離リマインド画面">
+  <div class="inner">
+    <button class="top-close" aria-label="ゲームを中断">×</button>
+    <div class="center">
+      <h1 class="headline">画面から 40cm<br/>離れてください</h1>
+      <div class="illustration" aria-hidden="true">distance-40.svg</div>
+      <div class="countdown-wrap">
+        <div class="countdown" role="timer" aria-live="assertive">3</div>
+        <div class="auto-text">秒後に自動で開始</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

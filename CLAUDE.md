@@ -263,3 +263,37 @@ tests/                                       # Vitest 等のテスト
 - MCP: `playwright` を `.mcp.json` で project スコープ登録（Evaluator が利用）
 - 初回: `npx playwright install chromium`
 - 推奨スタック（無指定時のデフォルト）: Vite + React + TypeScript + Vitest + Playwright
+
+---
+
+## 5. Testing & Verification
+
+- マルチファイル変更後は **フルテストを必ず走らせてからタスク完了を宣言する**
+- UI / ビジュアル変更は可能な限り Playwright（または Puppeteer）でスクリーンショットを取って検証する
+- クロスプラットフォーム変更は **Web と Android（Expo Go）の両方** で動作確認する
+- UI タスクを完了とマークする前に、変更ファイルを以下の観点で監査する：
+  - Web 専用 API（`document` / `window` / DOM 操作）が native ビルドに混入していないか
+  - `Image` の `transform` プロパティ等、native でメモ化が効かないパターンがないか
+  - 検出した懸念点はユーザーが Android で実機確認する**前に**列挙する
+
+---
+
+## 6. Expo / React Native 制約
+
+- このプロジェクトは **Expo SDK 54 をターゲット**とする（**SDK 55 以降にアップグレードしない**：Android Expo Go との互換性が壊れる）
+- **EAS Build より Expo Go ワークフローを優先**する（EAS のログインは bash ツールの stdin 経由では失敗する。サービスアカウントトークンが必要なケース以外は Expo Go で進める）
+- macOS で dev サーバーが `EMFILE` エラーを出したら、dev サーバー再起動ではなく **静的本番ビルドを serve する** フォールバックに切り替える
+
+---
+
+## 7. Git & GitHub
+
+- 個人リポジトリは **SSH エイリアス `github-green` を使用**する（`masudagreen-radiko` ではない。誤って後者を使うと push が失敗する）
+- 既定ブランチは **`main`**
+
+---
+
+## 8. Skill & Config 配置
+
+- カスタム Skill は **`.claude-personal/skills/` に配置**する（`.claude/skills/` ではない）
+- プロジェクト固有設定で迷ったら、配置先を確認してからファイル作成すること

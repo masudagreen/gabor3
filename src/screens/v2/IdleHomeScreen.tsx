@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   body: {
     fontSize: fontSize.bodyLg,
-    lineHeight: lineHeight.bodyLg,
+    lineHeight: fontSize.bodyLg * lineHeight.bodyLg,
     textAlign: 'center',
     marginBottom: spacing.s6,
     opacity: 0.9,

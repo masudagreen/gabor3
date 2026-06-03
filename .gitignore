@@ -39,6 +39,7 @@ build/
 /*.jpg
 /*.jpeg
 /single-play-list.md
+/temp-images/
 
 # Test
 coverage/

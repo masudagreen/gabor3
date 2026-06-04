@@ -27,6 +27,7 @@ build/
 *.tsbuildinfo
 *.apk
 *.aab
+*.tar.gz
 
 # EAS
 .eas/

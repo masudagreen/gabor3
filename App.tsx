@@ -32,6 +32,7 @@ import { OnboardingScreen } from './src/screens/v2/OnboardingScreen';
 import type { OnboardingResult } from './src/screens/v2/OnboardingScreen';
 import { DataResetNotice } from './src/components/v2/DataResetNotice';
 import { DisclaimerPanel } from './src/components/v2/DisclaimerPanel';
+import { AdManager } from './src/components/v2/AdManager';
 import {
   runStartupMigration,
   acknowledgeResetNotice,
@@ -134,12 +135,14 @@ export default function App() {
         ) : showOnboarding ? (
           <OnboardingScreen onComplete={handleOnboardingComplete} testId="onboarding" />
         ) : (
-          <AppRoot
-            settings={settings}
-            viewingDistanceCm={viewingDistanceCm}
-            onSettingsChange={handleSettingsChange}
-            onReadDisclaimer={() => setDisclaimerOpen(true)}
-          />
+          <AdManager>
+            <AppRoot
+              settings={settings}
+              viewingDistanceCm={viewingDistanceCm}
+              onSettingsChange={handleSettingsChange}
+              onReadDisclaimer={() => setDisclaimerOpen(true)}
+            />
+          </AdManager>
         )}
         <DataResetNotice
           visible={ready && showResetNotice}

@@ -15,8 +15,17 @@ import {
 } from '../../src/platform/audio';
 
 describe('SOUND_KINDS / DEFAULT_VOLUME', () => {
-  it('5 音種を持ち、各音種に既定音量がある', () => {
-    expect([...SOUND_KINDS]).toEqual(['correct', 'wrong', 'tick', 'end', 'badge']);
+  it('v3.0 の clear/fail/tick/levelup/badge と v2 互換 correct/wrong/end を持つ', () => {
+    expect([...SOUND_KINDS]).toEqual([
+      'clear',
+      'fail',
+      'tick',
+      'levelup',
+      'badge',
+      'correct',
+      'wrong',
+      'end',
+    ]);
     for (const k of SOUND_KINDS) {
       expect(DEFAULT_VOLUME[k]).toBeGreaterThan(0);
       expect(DEFAULT_VOLUME[k]).toBeLessThanOrEqual(1);

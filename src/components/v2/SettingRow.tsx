@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useFocusStyle } from '../../theme/focusStyle';
 import { webAria } from '../../theme/ariaWeb';
+import { webSpaceActivation } from '../../theme/keyActivation';
 import { fontSize, fontWeight, tapTarget } from '../../theme/tokens';
 
 export type SettingRowProps = {
@@ -87,6 +88,8 @@ export const SettingRow: React.FC<SettingRowProps> = ({
         {...(radio
           ? webAria('radio', { checked: !!checked }, a11yLabel)
           : webAria('button', undefined, a11yLabel))}
+        // NF-9：radio 行は Space 未対応のため補完（button 行は RN-Web 既定で Space 起動可）
+        {...(radio ? webSpaceActivation(onPress) : {})}
         style={({ pressed }) => [focus, pressed && styles.pressed]}
       >
         {inner}

@@ -1,66 +1,80 @@
-# Sprint 6 自己評価 — ホームタブ・起動フロー・免責（F-08 / F-06 / F-10）
+# Sprint 6 セルフレビュー（v3.0）— ボトムタブナビ・中断ダイアログ（F-05 / F-07）+ AppRoot v3 本配線
 
-> v2.0（旧 v1.x の本ファイル内容を上書き）。spec §7 S6。デザイン：`docs/design/sprints/sprint-6/screens.md`（S6-1 オンボ / S6-2 距離リマインド / S6-3 結果カード RC-1）。
+> spec.md v3.0 / F-05・F-07・§4.4。S5 の v3 ゲーム画面を **AppRoot v3** に配線し、
+> `App.tsx` を v3 アプリへ切替え、v2 ゲーム UI チェーンの撤去に着手した。
+> （本ファイルは v2.0 S6 の内容を v3.0 S6 で上書き。）
 
-## やったこと
+## 1. やったこと
 
-### データ/集計層（テスト可能・日付注入）
-- `src/lib/v2/dateUtil.ts`：端末ローカル日付（YYYY-MM-DD）・日数差。すべて Date/日付文字列を引数注入する純関数（AS-20）。
-- `src/lib/v2/statsAggregation.ts`：完了セッション 1 件から DailyStats（その日の最良スコア max・件数 +1）/ Streak（前日継続で +1、同日据え置き、2 日以上空きで 1 にリセット・longest 保持）/ PlayStats（累計 +1）を計算する純関数。
-- `src/state/statsRecorder.ts`：`recordCompletedSession` が `persistCompletedSession`（SessionRecord 保存）+ 上記集計の保存を束ねる。完了時刻 `now` を注入可能。中断は呼ばない（記録経路に渡さない）。
+### F-05 ボトムタブナビ
+- `src/components/v3/BottomTabBar.tsx`（NV-1）新設。3 タブ（ホーム/履歴/設定）を最下部に常時表示。
+- アクティブ表示を**色のみに依存しない**（NF-12）：上辺 3px インジケータ + 前景色 + ラベル太字（Bold/Medium）+ アイコン塗り/線（Ionicons home/time/settings の塗り版/outline 版）。
+- タップ領域 64px（>= 48pt）、bottom セーフエリア分の padding（NF-30）。
+- a11y：`role="tablist"` / 各 `role="tab"` + `aria-selected` + aria-label（「ホームタブ」等）。Web は Tab/Enter（focus ring 3px、useFocusStyle）。
+- `src/screens/v3/AppRoot.tsx` が `onTabPress` を受け、プレイ中なら中断ダイアログ、非進行中なら即切替を判断。
 
-### オンボ/距離リマインド（UI）
-- `src/components/v2/DisclaimerPanel.tsx`（DC-1）：医療機器でない旨・対象外ユーザーを薄黄パネルで表示（本文 24px≥18pt）。オンボ初回と設定再閲覧で共用。
-- `src/screens/v2/OnboardingScreen.tsx`（ON-1 / S6-1）：4 ステップ。免責同意（理解チェック→同意、未チェックで disabled）→ 年齢層（選択で自動進行、70 代以上は警告+続行）→ 視聴距離（選択で自動進行）→ 概要（はじめる）。合計タップは通常 5、70 代以上経路でも 6（F-06 ≤6 厳守）。
-- `src/screens/v2/DistanceReminderScreen.tsx`（DR-1 / S6-2）：「画面から {n}cm 離れてください」を h1 36px で表示。`CountdownTimer` large（テーマ追従、F-12 統一）で 3 秒自動進行。X 中断以外の操作不要。片眼ガイダンス時のみ補助文。
+### F-07 中断ダイアログ
+- `src/components/v3/ConfirmDialog.tsx`（DG-1）新設。中央モーダル + scrim（背後ゲームが透ける）。
+- 2 択「中断する（OK・primary）」「続ける（キャンセル・secondary）」、各 56pt（>= 48pt）。
+- a11y：`role="dialog"` `aria-modal` `aria-labelledby`、初期フォーカス=安全側「続ける」、**Esc=キャンセル**（Web のみ。`document` は `Platform.OS!=='web' || typeof document==='undefined'` でガード）。
+- 本文は screens.md S6-2 改訂どおり「中断するとこのゲームは記録されず、レベルも変わりません。」（`abortV3.message`）。
+- トリガー：**プレイ中**のホーム左上 × / 他タブ選択（両方で同一ダイアログ）。
+- OK：起点に応じ着地（× = ホームに留まり同レベルで新ゲーム再生成 / タブ = 当該タブへ遷移）。**進行中ゲームはレベル・記録に一切反映しない**（§4.4：`applyResult`/記録を呼ばず破棄、`gameKey` を進めて作り直し）。
+- キャンセル：ダイアログ閉、`paused` 解除でゲーム継続（残り時間・選択状態は GameScreen 内 state 保持）。
+- 非進行中（結果開示中・待機中）は × ・タブ移動とも**ダイアログなしで自由遷移**。
 
-### ホーム結果カード＋配線
-- `src/components/v2/SessionResultCard.tsx`（RC-1 / S6-3）：0〜100 スコアを 72px tabular-nums で最大強調、今日のストリーク（炎+テキスト、色非依存）、「もう一度」64px（≥56pt）。region ラベルでスコア/連続日数を読み上げ。
-- `src/screens/v2/AppRoot.tsx`：ホームを 3 フェーズ（distance / playing / result）に再構成。起動・「もう一度」は distance から始まり自動で playing へ。完了で `recordCompletedSession` を呼び結果カードへ。中断は記録経路に渡さず result（非進行）へ着地。
-- `App.tsx`：マイグレーション後、初回（onboardingCompleted=false）のみオンボーディングを表示。完了で UserProfile（onboardingCompleted / disclaimerAgreedAt / ageGroup / viewingDistanceCm）を保存。設定の「免責事項を読む」で再閲覧モーダル（F-10）。
+### AppRoot v3 本配線 / App.tsx
+- `App.tsx` を v2 アプリ（v2 AppRoot/Onboarding/v2 migration）から **v3 AppRoot 本配線**へ切替え。起動で v3 `runStartupMigration`（F-11：旧 v1〜v2 消去 + v3 初期化 L1）→ v3 Settings(darkMode)/UserProfile ロード → DataResetNotice（RZ-1）→ v3 AppRoot。
+- ホーム=S5 の v3 GameScreen を現在レベルで暫定起動（本格ホーム結果フローは S7）。履歴/設定=暫定プレースホルダ（`TabPlaceholderScreen`「準備中」）。
+- GameScreen に `onPlayingChange(playing)` を追加し、AppRoot が「進行中（締め切り前）/非進行（開示後）」を把握して F-05/F-07 の自由遷移判定に用いる。
+- 旧 `EXPO_PUBLIC_V3_GAME` ハーネス分岐と `GameDevHarness.tsx` を撤去・統合。
 
-## 受け入れ基準マッピング
+### v2 撤去
+- 削除：`screens/v2/{AppRoot,GameScreen}`・`components/v2/{BottomTabBar,ConfirmButton,SessionResultCard}`・`screens/v3/GameDevHarness`。
+- 削除した v2 テスト：`screens/v2/{AppRoot,startupFlow,AppRootFeedback,GameScreen,GameScreenFeedback}`・`components/v2/{BottomTabBar,SessionResultCard}`・`integration/s10FullFlow`。`gameComponents.test` から ConfirmButton ブロックのみ除去。
+- **`SessionResultCard` 撤去で run.md §V3.4 の既知 authored-broken テストが解消**（全件グリーン）。
+- 温存（S7/S8/S9/S10 が依存）：v2 lib scoring/gameMachine/roundGen/patch/gameView・state stats/badge/sessionRecorder・v2 SettingsScreen/HistoryScreen/DistanceReminder/Onboarding・残る v2 描画コンポーネント（オーファンだが v2 描画テストが緑のため温存、S7 で一括撤去推奨）。詳細は run.md §V3-S6.4。
 
-### F-06 起動フロー
-- [x] 初回のみオンボ表示・2 回目以降なし（App の `onboardingCompleted` ゲート、startupFlow/Onboarding テスト）
-- [x] オンボ完了までのタップ ≤6（通常 5、70 代以上 6）
-- [x] 免責未チェックで先に進めない（「同意する」disabled、Onboarding テスト）
-- [x] オンボ後/2 回目以降は距離リマインド経由でホーム自動開始（AppRoot/startupFlow テスト）
-- [x] 距離リマインド「{n}cm 離れて」18pt 以上・F-12 カウントダウンで自動進行
-- [x] X 中断以外の操作なしで自動進行（DistanceReminder テスト）
-- [x] クールダウン画面なし（廃止）
+## 2. 確認したこと（自己評価チェックリスト）
 
-### F-08 ホーム（ゲーム＋結果＋再プレイ）
-- [x] ホームでプレイ（playing フェーズ）
-- [x] r 完了後 0〜100 スコア表示（SessionResultCard、startupFlow テスト）
-- [x] 今日のストリーク表示（currentStreak）
-- [x] 「もう一度」56pt 以上・押すと距離リマインド経由で新セッション
-- [x] 回数制限なし（フェーズ遷移のみ、上限ロジックなし）
-- [x] 結果表示中は非進行＝タブ自由（AppRoot テスト）
+- [x] `npm run typecheck`（tsc strict）エラー 0
+- [x] `npm test` 59/59 スイート・**626/626 件 全 PASS**（S5 の 1 赤 = 解消）。新規 AppRoot.test +9 件
+- [x] `npm run build:web` 成功・**既定ビルドが v3 アプリ**（AppEntry ≈ 1.07 MB、v2 撤去で縮小）
+- [x] Playwright で 360/375/1280 を検証：3 タブ・aria-selected・プレイ中タブ/× で中断ダイアログ・キャンセル継続・OK で当該タブ遷移・非進行中自由遷移（`temp-images/s6/*.png`）
+- [x] 空状態：履歴/設定の「準備中」プレースホルダ表示
+- [x] デザイン乖離なし：DG-1 / NV-1 / screens.md S6-1/S6-2 に準拠（色+形+ラベル、56pt ボタン、scrim）
+- [x] native 懸念監査：Web 専用 API は ConfirmDialog の `document`(Esc) のみ・Platform/typeof ガード済み。Image transform メモ化問題なし
+- [x] セーフエリア：タブバー bottom inset / タブ画面・ダイアログはセーフエリア準拠（NF-30）。ゲーム画面はフルスクリーン許容（NF-29、GameScreen 既存）
 
-### F-10 免責
-- [x] 文言 18pt 以上（DisclaimerPanel body 24px）
-- [x] 「同意する」まで進めない（オンボ時）
-- [x] 設定から再閲覧（App の DisclaimerReviewModal、`onReadDisclaimer` 配線）
-- [x] 同意日時を保存（disclaimerAgreedAt に ISO 文字列）
-- [x] 70 代以上で追加警告・医師相談推奨
+## 3. 受け入れ基準マッピング
 
-### F-04 / §6 永続化・集計
-- [x] 完了セッション保存（SessionRecord、completedAt 非 null）
-- [x] DailyStats max 更新・件数（statsAggregation/statsRecorder テスト）
-- [x] Streak 連続/途切れ（同日据え置き・前日 +1・2 日空き reset）
-- [x] PlayStats 累計 +1
-- [x] 中断は記録しない（startupFlow テスト：X→中断する でセッション 0 件・累計 0）
+### F-05
+| 受け入れ基準 | 実装 |
+|---|---|
+| 画面下部に 3 タブ常時表示 | BottomTabBar（AppRoot 最下部固定） |
+| タップで対応画面に切替 | requestTab → setTab（非進行中即時） |
+| 選択中タブを色のみ非依存で明示 | 上辺3px+前景色+太字+塗り/線アイコン（NF-12） |
+| タップ領域 48pt 以上 | tab minHeight 64px |
+| プレイ中の他タブで中断ダイアログ | playing ∧ next≠home → ダイアログ |
+| 非進行中のタブ移動は自由 | playing=false（開示後）で即切替 |
+| Web キーボード操作 | role=tab + Pressable + focus ring（Tab/Enter） |
 
-## 確認したこと
-- `npx tsc --noEmit`：エラー 0
-- `npm test`：**33 スイート / 297 件 全 PASS**（S5=256 → +41）
-- `npm run build:web`：PASS（web bundle ≈ 588 kB）
-- 主要動線（自動テストで通過）：距離リマインド自動進行 → 自動開始 → 完了 → 結果カード → もう一度 → 距離リマインド。免責ゲート、70 代警告、オンボ完了で結果が onComplete に渡る。
-- 状態網羅：空（streak 0 →「今日からスタート」）/ 初期スコア 0 / 中断時の非進行着地。
+### F-07
+| 受け入れ基準 | 実装 |
+|---|---|
+| プレイ中 × でダイアログ | requestAbortFromX（playing 時のみ） |
+| プレイ中 他タブで同一ダイアログ | requestTab、同一 ConfirmDialog |
+| 2 択「中断する」「続ける」 | abortV3.confirm/cancel |
+| OK=記録せず中断・レベル不変・着地（×=終了/タブ=当該タブ） | confirmAbort（applyResult/記録を呼ばず破棄、起点で setTab） |
+| キャンセル=継続（残り時間・選択保持） | cancelAbort（paused 解除、GameScreen state 保持） |
+| 非進行中は × ・タブとも自由 | playing=false で × は no-op・タブは即切替 |
+| ボタン 48pt 以上 | ConfirmDialog button minHeight 56pt |
 
-## 既知の懸念・申し送り
-- **実機スクリーンショット未取得**：本スプリントで起動フローが App から到達可能になったため、Web/Expo Go での実描画確認（オンボ・距離リマインド・結果カードのレイアウト/セーフエリア）は実機推奨。点滅なし・トークン準拠はコード上で担保済み。
-- **act 警告（cosmetic）**：startupFlow テストで完了 effect の永続化 Promise / useGameTimer の保留タイマーがアサート後に解決し React の act 警告が出るが、テストは全 PASS。挙動への影響なし。
-- **バッジ判定（S8）・音/ハプティクス（S9）は未配線**：`recordCompletedSession` の戻り値と完了 effect が接続点。
-- スキーマ変更なし（DailyStats/Streak/PlayStats は §6 で凍結済みフィールドのみ使用）。
+## 4. 既知の懸念 / 申し送り（S7）
+
+- **起動フロー暫定**：S6 ではオンボーディング・距離リマインドを挟まず直接ホームゲーム開始。F-06 の初回オンボ → 距離リマインド → 自動開始は S7。
+- **ホーム結果暫定**：`onResolved` は `applyResult` のメモリ反映 + 次ゲーム生成のみ。ホーム結果カード（RC-1）・記録永続化（`recordCompletedGame`）・「もう一度」は S7 で `onResolved` に接続。レベルの永続化（`saveLevelState`）も S7。
+- **× 起点の中断着地**：現状「同レベルで新ゲーム再生成」。S7 のホームフロー（待機/結果）設計時に着地点を再検討。
+- **v2 オーファン撤去**：v2 描画コンポーネント群（GaborGrid 等）は App から未参照だが v2 テストが緑のため温存。S7 で v2 起動フローを完全に外したら一括撤去推奨（CountdownTimer v2 は DistanceReminder v2 が依存中）。
+- **act() 警告**：GameScreen のタイマー（useGameTimer）由来の act 警告は S5 から既存（テストは PASS）。挙動影響なし。
+- **データモデル変更なし**（§7 凍結スキーマ準拠）。

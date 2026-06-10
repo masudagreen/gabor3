@@ -1,74 +1,75 @@
-# Sprint 2 自己レビュー — データ層・設定（F-13・F-11・データモデル §6）（v2.0）
+# Sprint 2 自己評価 — レベルシステム中核ロジック（§4 / F-04）（v3.0）
 
-> 対象：spec.md S2 / F-13（設定タブ）・F-11（起動時データリセット）・§6（データモデル）。
-> デザイン：`docs/design/sprints/sprint-2/screens.md`・`docs/design/system.md §9.1`・`docs/design/components.md`（SR-1/FT-1/FT-2/FT-3/DG-1/RZ-1）。
-> 注：本ファイルは v1.x（旧プロジェクト）の同名レビューを v2.0 内容で上書きしたもの。
+> v3.0 リブート S2。**純ロジック層のみ**（描画・永続化・UI は S3 以降）。
+> 成果物：`src/lib/v3/level.ts`、`tests/lib/v3/level.test.ts`。
+> 注：本ファイルは v2.0 の同名レビュー（データ層・設定）を v3.0 S2 内容で上書きしたもの。
 
-## やったこと
+## 1. やったこと
 
-### 1. データモデル §6（`gaboreye:v2:*` 名前空間）
-- `src/state/schema.ts`：UserProfile / Settings / RoundRecord / SessionRecord / DailyStats / Streak / PlayStats / BadgeStatus の型を §6 のフィールド・型どおりに定義。列挙（ScoringMode/DarkMode/OneEyeGuidance/BadgeId）と `PARAM_SPECS`（n/m/r/a/b の min/max/step/default＝system §9.1）と既定値ファクトリを同居。
-- §6.2 注記の「漸進難化モード用の拡張余地」を Settings に任意フィールド（`progressiveModeEnabled` / `progressionState`）として残置（v2.0 では未実装・未表示）。**凍結スキーマの必須フィールドは変更していない**（任意追加のみ）。
-- `src/state/store.ts`（AsyncStorage JSON 低レベル）＋ `src/state/repository.ts`（型付き load/save）。単一レコード（固定キー）とコレクション（session/dailyStats/badge、プレフィックス走査）の両方に対応。破損 JSON・未保存は既定値にフォールバック。
+`src/lib/v3/level.ts`（新規・v3 名前空間）に以下の純関数群を実装した。v2 の roundGen/scoring/gameMachine は**未削除**（指示通り S4 で撤去）。`rng.ts` 等の流用も今回は不要だったため無改変。
 
-### 2. F-11 起動時データリセット
-- `src/state/migration.ts`：`runStartupMigration()` が旧名前空間（`gaboreye:v1:*` / `gaboreye:v1.1:*` / `gaboreye:v1.2:*`）を検出・`multiRemove` で消去し、v2 中核レコードを未保存なら既定で初期化（`ensureV2Initialized`）。
-- 通知の 1 度化：`resetNoticeShown` フラグ（`gaboreye:v2:resetNoticeShown`）。`shouldShowNotice = 消去あり ∧ 未通知`。`acknowledgeResetNotice()` で OK 押下時にフラグ確定。冪等（旧キーが無ければ消去しない）。
-- 通知 UI＝`DataResetNotice`（RZ-1）。表示制御は App.tsx が `shouldShowNotice` で行う（実際の起動フロー組込み詳細は S6 領分だが、S2 で配線済み）。
+### 1.1 5 変数の値集合とキー（§4.1 確定値）
+- `VALUE_SETS`：count=[1,2,3,4] / seconds=[40,35,30,25,20] / direction=['one-way','oscillate'] / gridSize=[3,4] / rotationSpeed=[6,5.5,5,4.5,4,3.5,3,2.5,2]。**各配列はインデックス 0 が最易**（易→難順）。
+- `DEFAULT_VARIABLE_ORDER`=['count','seconds','direction','gridSize','rotationSpeed']（最内側→最外側、AS-3）。
+- `VariableRanges` 型と `defaultVariableRanges()`（フル範囲ファクトリ）。S2 ではデフォルト=フル範囲を受け取る純関数として構成。
+- 型：`VariableKey` / `Direction`（'one-way'|'oscillate'）/ `GridSize`（3|4）/ `LevelParams`。
 
-### 3. F-13 設定タブ
-- `src/screens/v2/SettingsScreen.tsx`：screens.md S2-1 のグループ順（ゲーム設定 / 採点方式 / 表示・視聴 / フィードバック / その他）で全項目を配置。各変更で即時保存。
-  - n＝SegmentedControl（3/4/5）、m/r/a/b＝Slider（範囲・step・既定は §9.1）、a/b は「難しい(小)/易しい(大)」併記。
-  - 採点方式①②③＝縦リスト 3 ラジオ（各行 56pt、ラベル+説明 caption）。**既定②（auto-confirm）**＝screens.md 注記の Designer 提案を採用。
-  - 視聴距離 30/40/50（既定 40、UserProfile に保存）、ダークモード OS連動/明/暗、音/振動 個別トグル（ON/OFF テキスト併記）、片眼 なし/左/右/交互。
-  - 免責再閲覧（入口のみ、押下ハンドラは任意 prop＝S6 で配線）、全データ削除（行タップ→ConfirmDialog→「削除する」の 2 段階）、バージョン `v2.0.0`＋免責同意日時。
-- `src/state/settings.ts`：範囲外不可を担保する純関数 setter（`clampToSpec` は小数 step 0.05 の浮動小数誤差も丸めで吸収）＋ `updateSettings`（load→変換→save）。
-- `src/state/dataReset.ts`：全データ削除（v2 全消去→既定再初期化）。リセット通知フラグは保持し、削除後に旧データ消去通知が誤発火しないようにした。
+### 1.2 mixed-radix オドメータ（§4.2）
+- `totalLevels(ranges, order?)`：各変数の有効段数の積。
+- `levelToParams(level, order?, ranges?)`：L（1始まり）→ 5 変数実値。(L−1) を mixed-radix 展開（最内側=最下位桁、桁の値=易→難配列インデックス）。範囲外は `RangeError`。
+- `paramsToLevel(params, order?, ranges?)`：逆変換（S4/バッジ判定の再利用を見越して併設）。
 
-### 4. 起動配線（App.tsx）
-- S1 のプレースホルダを置換：マイグレーション実行 → darkMode を ThemeProvider に反映 → SettingsScreen 表示 → 必要時のみ DataResetNotice。ボトムタブは S5 のため未統合（暫定単体表示）。
+### 1.3 レベル昇降（§4.4 / F-04）
+- `LevelState`（§7.3 の形：currentLevel/consecutiveFailures/highestLevel）。
+- `initialLevelState()`：{1, 0, 0}（AS-15）。
+- `applyResult(levelState, result, ranges?, order?)`：result='clear'|'fail'。`{ levelState, levelDelta }` を返す純関数（引数不変）。
+  - clear → consecutiveFailures=0、currentLevel+1（上限 totalLevels クランプ）、highestLevel=max(既存, クリアレベル)。levelDelta=+1（クランプ時 0）。
+  - fail 1 回目 → consecutiveFailures=1、レベル不変、levelDelta=0。
+  - fail で consecutiveFailures が 2 到達 → currentLevel−1（下限1クランプ）、consecutiveFailures=0、levelDelta=−1（クランプ時 0）。
 
-## 確認したこと（自己評価チェックリスト）
-- [x] 受け入れ基準を満たすことをテストで確認（下表マッピング）
-- [x] `npx tsc --noEmit`：エラー 0
-- [x] `npm run build:web`：PASS（App.tsx 込みでバンドル成功 ≈ 393 kB）
-- [x] `npm test`：**13 スイート / 100 件 PASS**（S1=46 → +54）
-- [x] 主要動線をテストで操作：格子サイズ/採点方式/視聴距離/トグル変更→永続化、全データ削除 2 段階→既定復帰、ダークモード変更→親通知
-- [x] 空/ロード/エラー状態：未保存→既定値、ロード中はタイトルのみ、破損 JSON→既定フォールバック、範囲外→クランプ
-- [x] デザイン乖離なし：components.md の SR-1/FT-1/FT-2/FT-3/DG-1/RZ-1 とトークン（fontSize/spacing/radius/tapTarget）に準拠、56pt 高さ・ON/OFF 一目判別・難→易ラベル
-- [x] 既存スプリント回帰なし：S1 残置テスト（theme/calibration/gaborPixels/GaborPatch/ThemeProvider/focusStyle/sanity）全 PASS
-- [x] `docs/run.md` に §0-S2 追記済み
+### 1.4 範囲変更時のクランプ（§4.5 / F-13）
+- `clampLevelToRange(currentLevel, newTotalLevels)`：[1, newTotal] にクランプ（number→number）。
+- `clampLevelState(levelState, ranges, order?)`：currentLevel を新範囲クランプ＋consecutiveFailures=0 リセット＋highestLevel も新上限クランプ。純関数（引数不変）。
 
-## 受け入れ基準マッピング
+## 2. 確認したこと（自己評価チェックリスト）
 
-### F-13（設定タブ）
+| 項目 | 結果 |
+|---|---|
+| `npm run typecheck`（tsc strict） | **エラー 0 PASS** |
+| `npm test`（全体） | **52/53 スイート・517/518 件 PASS**（S2 前 469/470 → 新規 48 件追加） |
+| 新規テスト（`tests/lib/v3/level.test.ts`） | **48 件 全 PASS** |
+| 既存スプリント回帰 | なし（v2/v1 系・state 系すべて従前通り。唯一の赤は下記の既知 1 件で本 S2 と無関係） |
+
+S2 は App.tsx 未配線の純ロジック追加のため既存 web バンドルへ未参照＝`build:web` 挙動不変。型・テストは緑。
+
+### 既知の赤 1 件（本 S2 と無関係・run.md §V3.4 記載済み）
+- `tests/components/v2/SessionResultCard.test.tsx`「セッションスコアを表示する」。コミット `0285ac5` で authored-broken（rAF カウントアップ vs 同期アサートの不整合）。一度も緑になっておらず、S5/S7 で SessionResultCard を v3 化する際に自然解消予定。S2 で導入したものではない。
+
+## 3. 受け入れ基準マッピング（F-04 / §4）
+
 | 受け入れ基準 | 実装 | テスト |
 |---|---|---|
-| n/m/r/a/b 設定可・反映 | SettingsScreen + settings setter | settings.test / SettingsScreen.test |
-| 範囲外不可 | `clampToSpec` / `setGridSize` スナップ | settings.test（クランプ・小数 step） |
-| 採点方式①②③ | 縦ラジオ + `setScoringMode` | settings.test（列挙）/ SettingsScreen.test |
-| 視聴距離 30/40/50（既定40）即保存 | UserProfile.viewingDistanceCm | SettingsScreen.test |
-| ダークモード OS連動/明/暗 | `setDarkMode` + ThemeProvider 反映 | settings.test / SettingsScreen.test |
-| 音/振動 個別トグル・一目判別 | Toggle（ON/OFF 併記、NF-12） | settingsControls.test / SettingsScreen.test |
-| 片眼 off/左/右/交互 | `setOneEyeGuidance` | settings.test |
-| 免責再閲覧 | onReadDisclaimer 入口（S6 配線） | — |
-| 全データ削除 2 段階 | 行→ConfirmDialog→削除 | SettingsScreen.test |
-| 各行 56pt 以上 | SettingRow minHeight=56 | （視認・トークン） |
-| v2.0.x + 同意日時 | バージョンブロック | SettingsScreen.test（v2.0.0） |
+| クリアで +1（上限クランプ） | `applyResult` clear 分岐 + `Math.min(.., total)` | 「クリアで +1」「上限でクリアしても +1 されず levelDelta=0」「部分範囲上限クランプ」 |
+| 失敗 1 回目はレベル不変 | failures<2 で levelDelta=0 | 「失敗 1 回目はレベル不変」 |
+| 2 連続失敗で −1（下限 L1 クランプ）＋カウントリセット | failures>=2 分岐 + `Math.max(..,1)` | 「2 連続失敗で −1」「L1 で 2 連続失敗してもレベル不変 levelDelta=0」 |
+| クリアで連続失敗リセット | clear 分岐 consecutiveFailures=0 | 「失敗→クリア→失敗で下がらない」 |
+| 連続失敗カウント永続 | LevelState.consecutiveFailures に保持（永続化は S3） | 「連続失敗カウントは永続値」「4 連続失敗で 2 段下がる」 |
+| 中断は影響しない | applyResult を呼ばない設計（'clear'\|'fail' のみ受理） | — （呼び出し側 S6 の責務） |
+| レベル ⇄ 5 変数 mixed-radix 変換・デフォルト梯子 | `levelToParams` / `paramsToLevel` / `totalLevels` | L1/L2/L4→L5/L20→L21/L40→L41/L80→L81/L720・全 720 一意・往復恒等・部分範囲・代替変化順 |
+| 範囲変更時のクランプ＋連続失敗リセット | `clampLevelState` / `clampLevelToRange` | clampLevelState/clampLevelToRange 全ケース |
 
-### F-11（起動時データリセット）
-| 受け入れ基準 | 実装 | テスト |
-|---|---|---|
-| 旧名前空間キー全消去 | `selectLegacyKeys` + `removeKeys` | migration.test |
-| v2 で初期化 | `ensureV2Initialized` | migration.test |
-| 消去完了通知（1 度だけ） | `shouldShowNotice` + フラグ | migration.test（2 回目は出さない） |
-| OK 56pt 以上 | DataResetNotice OK=64pt | （トークン） |
-| 2 回目以降出さない | `wasResetNoticeShown` | migration.test |
-| 端末ローカルのみ | AsyncStorage のみ使用 | （構成） |
+## 4. テスト件数の増加
+- S2 前：全体 470 件（うち 1 赤＝既知）。
+- S2 後：全体 **518 件**（**+48**、うち赤は同じ既知 1 件のみ）。新規はすべて `tests/lib/v3/level.test.ts`。
 
-## 既知の懸念・申し送り
-- **免責再閲覧の遷移先（DisclaimerPanel）は未実装**。S2 は入口（任意 prop）まで。spec 上 DisclaimerPanel/オンボは S6 領分のため、S6 で `onReadDisclaimer` を配線する。
-- **ボトムタブ未統合**：S2 は SettingsScreen 単体表示。S5（NV-1 BottomTabBar・中断ダイアログ）で 3 タブに組込む。DataResetNotice の起動フロー上の表示順（オンボより前）も S6 で最終確定。
-- **Slider は −/＋ステッパ式**を採用（`@react-native-community/slider` 等の追加依存を避け、Web の Tab/Enter キーボード操作と RN タップを両立するため）。連続ドラッグ UI ではないが、step 単位の確実な操作・範囲クランプ・a11y（role=adjustable + aria-value）は満たす。ドラッグ式が望ましければ S10 仕上げで再検討可。
-- **darkMode 即時反映**は App.tsx が `onSettingsChange` で受けて `ThemeProvider preference` を更新する設計。S5/S6 でルートが置き換わる際は同じ配線を引き継ぐ必要がある。
-- dev サーバー直起動の代わりに `build:web` で検証（CLAUDE.md §6 EMFILE フォールバック方針）。バンドル成功＝起動経路の import 健全性を担保。
+## 5. 既知の制約・申し送り
+- **永続化は未実装（S3 担当）**：`LevelState` の `gaboreye:v3:levelState` 読み書き、`Settings.variableRanges`/`variableOrder` の保存・読み込み、F-11 起動時 v3 初期化（currentLevel=1）。本 S2 は純関数のみで AsyncStorage に触れていない。
+- **連続失敗の「永続」はデータ型として担保**：`applyResult` は state を読み次 state を返す純関数。アプリ再起動・日跨ぎでの実保持は S3 の永続化に委ねる（型・遷移は S2 で確定）。
+- **paramsToLevel を併設**：指示に明記はないが `levelToParams` の逆として 1 関数で完結し、S4 ゲームコア／S8 バッジ判定（levelParams → 高難度判定）で再利用見込み。仕様（§4.2 相互変換）の範囲内であり仕様外機能の追加ではない。
+- **VariableRanges の前提**：各配列は VALUE_SETS の部分集合かつ易→難順を保つ前提（S3 の設定 setter で担保）。S2 の純関数はこの前提下で正しく動く。各変数が最低 1 値を持つこと（F-13）の強制は設定 UI 側（S3）の責務。
+- `applyResult`/`clampLevelState` のデフォルト引数はフル範囲・デフォルト変化順。S3 以降は実際の `Settings` 由来 ranges/order を渡す。
+
+## 6. 成果物パス
+- 実装：`/Users/np_202212_11/projects/gabor3/src/lib/v3/level.ts`
+- テスト：`/Users/np_202212_11/projects/gabor3/tests/lib/v3/level.test.ts`
+- 自己評価：`/Users/np_202212_11/projects/gabor3/docs/sprints/sprint-2-self-review.md`

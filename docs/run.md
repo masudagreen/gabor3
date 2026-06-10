@@ -2,9 +2,739 @@
 
 このドキュメントは Generator が各スプリント完了時に追記する、**動かすための単一情報源** です。
 
-> **本書の構成（2026-05-30 更新）**：冒頭の **§0 v2.0** が現在のソース・オブ・トゥルース。
-> §1 以降は v1 / v1.1 / v1.2 の歴史的記録（**アーカイブ**）として残置する。
-> v2.0 開発では §0 を参照すること。v1.x の節は旧コードの所在把握用。
+> **本書の構成（2026-06-10 更新）**：冒頭の **§V3 v3.0** が現在のソース・オブ・トゥルース（`docs/spec.md`）。
+> その下の **§0〜§0-S10** は v2.0 の記録、**§1 以降** は v1 / v1.1 / v1.2 の歴史的記録（**アーカイブ**）。
+> v3.0 開発では §V3 を参照すること。§0 系は v2.0 コードの所在把握用、§1 以降は v1.x コードの所在把握用。
+
+---
+
+## V3. v3.0 リブート — S1：テスト基盤確認・v2 コードクリーンアップ（2026-06-10）
+
+> **このセクションが v3.0 の現在の起動・開発手順**。`docs/spec.md`（v3.0 凍結仕様）が機能のソース・オブ・トゥルース。
+> S1 は基盤確認と run.md 整備、インフラ起因破損の修復のみ。v3.0 機能（レベル管理）の実装は S2 以降。
+
+### V3.1 結論（S1 完了時点）
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| Node / npm | **OK** | `.tool-versions` 準拠（node 22.9.0 系） |
+| `npx tsc --noEmit`（typecheck） | **エラー 0（PASS）** | strict |
+| `npm test`（Jest） | **51 / 52 スイート PASS・469 / 470 件 PASS**。残り 1 件は既知の test/component 不整合（V3.4 参照） | インフラ起因の load 失敗 5 スイートを修復（worklets モック）。これにより 33 件のテストが復活（436 → 469 PASS） |
+| `npm run build:web`（本番 Web バンドル） | **PASS** | AdMob の native-only import で web バンドルが失敗していたのを修復。`dist/_expo/static/js/web/AppEntry-*.js` ≈ **1.87 MB**（reanimated/Ionicons/AdMob 追加でサイズ増）。`npx serve -s dist` で **HTTP 200・`<title>GaborEye</title>`** 確認 |
+| dev サーバー（`npm run web`） | フォールバック採用 | CLAUDE.md §6 に従い、検証は **静的本番ビルド（build:web）+ serve** で実施 |
+| Expo SDK | **54 系維持** | 55 以降に上げない（CLAUDE.md §6） |
+
+### V3.2 起動・テスト・ビルドコマンド（v3.0）
+
+```bash
+cd /Users/np_202212_11/projects/gabor3
+npm install                    # 依存解決（初回のみ）
+
+npm test                       # Jest 全テスト（51/52 スイート・469/470 件 PASS。V3.4 参照）
+npm run typecheck              # = tsc --noEmit（エラー 0）
+npm run build:web              # 本番 Web バンドル → dist/（PASS）
+npx serve -s dist -l 4599      # dist を HTTP 配信して動作確認（dev サーバー代替・HTTP 200）
+```
+
+#### Web 確認（2 経路）
+
+1. **dev サーバー（ホットリロード）**：`npm run web` → `http://localhost:8081`。
+   macOS で `EMFILE`（too many open files）が出る場合は dev サーバーの再起動ではなく、
+   **静的本番ビルドを serve するフォールバック**（下記）に切り替える（CLAUDE.md §6）。
+2. **静的本番ビルド + serve（EMFILE フォールバック・CI 相当）**：
+   ```bash
+   npm run build:web            # expo export --platform web → dist/
+   npx serve -s dist -l 4599    # http://localhost:4599 で配信。HTTP 200 / <title>GaborEye</title>
+   ```
+
+#### Android（Expo Go ワークフロー優先）
+
+```bash
+npm start                      # QR コード表示 → Expo Go で読み取り（CLAUDE.md §6：EAS より Expo Go 優先）
+# または
+npm run android                # Android Studio + AVD があれば直接起動
+```
+
+- **EAS ビルドは行わない**（bash の stdin 経由ログインは失敗する。CLAUDE.md §6）。Expo Go で実機確認する。
+- Expo SDK は **54 系を維持**（55 以降は Android Expo Go 互換が壊れる）。
+
+### V3.3 S1 で修復したインフラ起因の破損（v3.0 実装と無関係・v2.0 完成後の後続コミットで混入）
+
+v2.0 完成（§0-S10、52 スイート / 462 件 PASS・build:web PASS）の **後**に入った 2 コミットが基盤を壊していた。
+S1 ではテスト内容・プロダクトロジックを書き換えず、**インフラ層のみ**を是正した。
+
+| # | 破損 | 原因コミット | 症状 | S1 の是正（インフラのみ） |
+|---|---|---|---|---|
+| 1 | **Jest が 5 スイートを load 不能** | `0285ac5`（reanimated 追加） | `react-native-reanimated@4` が依存する `react-native-worklets` の native 初期化が jest-expo 下で失敗（"Native part of Worklets doesn't seem to be initialized"）。`SessionResultCard.tsx` を import する 5 スイートが起動時クラッシュ | `jest.setup.ts` に `jest.mock('react-native-worklets', () => require('react-native-worklets/lib/module/mock'))` を追加。公式モックで native 初期化を回避。4 スイート完全 PASS・33 件のテストが復活 |
+| 2 | **`npm run build:web` が失敗** | `675940d`（AdMob 追加） | `react-native-google-mobile-ads` が native-only モジュール（`react-native/Libraries/Utilities/codegenNativeComponent`）を top-level import するため、`App.tsx → AdManager.tsx` 経由で Web バンドルがエラー（runtime の `Platform.OS==='web'` ガードでは静的 import を防げない） | `AdManager.tsx` を Metro のプラットフォーム別解決で分割：`AdManager.native.tsx`（AdMob 実装そのまま）/ `AdManager.web.tsx`（広告なしスタブ）/ `AdManager.d.ts`（tsc 用の共通型宣言）。`App.tsx` の import パスは不変。**native の AdMob 挙動は変更なし** |
+
+- 修正ファイル：`jest.setup.ts`（追記）、`src/components/v2/AdManager.tsx` → `AdManager.native.tsx`（rename・中身不変）、`src/components/v2/AdManager.web.tsx`（新規スタブ）、`src/components/v2/AdManager.d.ts`（新規型宣言）。
+- **プロダクトロジック・テスト内容の書き換えなし**。Expo SDK / 依存バージョン変更なし。
+
+### V3.4 既知の残課題（1 件・要オーケストレーター判断）
+
+- **`tests/components/v2/SessionResultCard.test.tsx` の「セッションスコアを表示する」1 件が赤**。
+  - 原因：このテストとコンポーネントは v2.0 完成後のコミット `0285ac5` で**同時に新規追加**されたが、コンポーネントはスコアを `requestAnimationFrame` ベースのカウントアップで描画する一方、テストは `render` 直後に `rc-score` の値が `'72'` であることを**同期的**に検証する。jest 環境の rAF は `setTimeout` ベースで同期完了しないため、初期値 `0` のままアサートに失敗する（**この commit 時点から一度も緑になっていない＝authored-broken**）。
+  - S1 では未修正。修正には**テスト内容かプロダクト（アニメーション）ロジックの変更**が必要で、setup モードの責務（仕様外の改変禁止）を超える。
+  - **このスコア表示は v3.0 でスコア → レベルに置き換わる予定**（spec §0：0〜100 スコア全廃）。`SessionResultCard` 自体が S5/S7 で作り直し対象のため、本不整合は v3.0 実装（S5 以降）で自然に解消される見込み。オーケストレーター判断で「v3.0 実装まで残置」または「S1 内で 1 行のテスト調整」を選択されたい。
+
+### V3.5 S1：スコア管理由来の死にコード候補リストアップ（実削除は Phase 2 / 凍結デザイン後）
+
+> spec §0/§10 に従い、v3.0 で全廃される概念（**採点 3 方式 / 部分点 TP-FP-FN / 0〜100 スコア / 複数ラウンド r / 空間周波数変化 b**）に紐づく v2.0 コードを洗い出す。
+> **S1 では削除しない**（整理方針の確定とリスト化のみ）。実削除は凍結デザイン後の各スプリント（spec §8）で、該当機能の作り直しと同時に行う。
+
+#### A. 採点 3 方式（scoringMode ①②③）— spec §0「クリア/失敗 1 本に統一」で全廃
+| 場所 | 死にコード候補 |
+|---|---|
+| `src/state/schema.ts` | `ScoringMode` 列挙・`Settings.scoringMode`・既定値 |
+| `src/state/settings.ts` | scoringMode の妥当化 setter |
+| `src/lib/v2/gameMachine.ts` | 方式①②③ の状態機械分岐（`CONFIRM` 無視 / auto-confirm / all-correct-advance）。v3 は「全問正解で即締め切り or 時間切れ」の 1 本のみ |
+| `src/components/v2/ConfirmButton.tsx`（BN-1） | 方式② の確定ボタン。v3 に確定ボタンは存在しない |
+| `src/screens/v2/SettingsScreen.tsx` | 採点方式ラジオ UI（spec F-13：旧設定 UI は一切存在しないこと） |
+| 関連テスト | `gameMachine.test.ts` の方式別ケース・`SettingsScreen.test.tsx` の採点方式行・`settingsControls.test.tsx` の該当分・`s10FullFlow` の方式②/① フロー |
+
+#### B. 部分点・0〜100 セッションスコア（TP/FP/FN・FP_PENALTY・sessionScore）— spec §0/§10「全廃」
+| 場所 | 死にコード候補 |
+|---|---|
+| `src/lib/v2/scoring.ts` | `scoreRound`（TP/FP/FN・TP−FP）・`computeSessionScore`（0〜100・FP_PENALTY=50）・`toRoundRecord`。v3 は `result: 'clear' \| 'fail'` の 2 値判定（spec §4.3）に置換 |
+| `src/state/schema.ts` | `RoundRecord`（TP/FP/FN/score 保持）・`SessionRecord.sessionScore`・`DailyStats.bestSessionScore`。v3 は `GameRecord.result`・`DailyStats.highestLevelReached`（§7）に置換 |
+| `src/components/v2/SessionResultCard.tsx` | 0〜100 スコアの 72px 強調表示（カウントアップ含む＝V3.4 の赤テストもここ）。v3 はクリア/失敗・レベル変化表示に置換（spec F-08） |
+| `src/lib/v2/historyView.ts` / `chartGeometry.ts` / `LineChart.tsx` | 日次スコア（0〜100）折れ線。v3 は日次到達レベル折れ線に置換（spec F-09） |
+| `src/lib/v2/badges.ts` / `badgeDefinitions.ts` | 高スコア軸 B-09〜11（score≥80 等）。v3 は高レベル到達軸に再定義（spec §6.3） |
+| 関連テスト | `scoring.test.ts`・`historyView.test.ts`・`chartGeometry.test.ts`・`badges.test.ts`・`SessionResultCard.test.tsx`・`HistoryScreen.test.tsx` のスコア依存ケース |
+
+#### C. 複数ラウンド（roundCount = r / SessionRecord / RoundRecord）— spec §0/§10「1 ゲーム = 1 ラウンド = 1 レベル挑戦」
+| 場所 | 死にコード候補 |
+|---|---|
+| `src/state/schema.ts` | `Settings.roundCount`・`SessionRecord`（r ラウンド束ね）・`RoundRecord`。v3 は 1 ゲーム = 1 レコード（`GameRecord`、§7.4）に置換 |
+| `src/lib/v2/gameMachine.ts` | ラウンド → セッション進行ロジック（`roundIndex` / `roundScores` 集約） |
+| `src/state/sessionRecorder.ts` | r ラウンドを `SessionRecord` に組み立てる配線 |
+| `src/components/v2/SettingsScreen.tsx` / `Slider.tsx` | roundCount(r) スライダー UI |
+| 関連テスト | `gameMachine.test.ts`（ラウンド進行）・`sessionRecorder.test.ts`・`s10FullFlow`（roundCount=2 ケース） |
+
+#### D. 空間周波数変化（sfChangeSpeed = b / cpd アニメ）— spec §0/§10「変化軸は回転のみ・b は死にパラメータ」
+| 場所 | 死にコード候補 |
+|---|---|
+| `src/state/schema.ts` | `Settings.sfChangeSpeed`・`PARAM_SPECS` の b 範囲 |
+| `src/lib/v2/patch.ts` | `patchCpdAt(t)`・cpd 増減方向・cpd 物理下限（周波数変化用）。v3 は回転（`patchOrientationAt`）のみ |
+| `src/lib/v2/roundGen.ts` | 種類割当（回転40/周波数40/両方20）の「周波数/両方」分岐・初期 cpd ばらつき。v3 は回転種別のみ |
+| `src/lib/v2/gameView.ts` | `quantizeCpd`（cpd 量子化・BMP 再生成スロットル） |
+| `src/components/v2/GaborPatchCell.tsx` / `GaborGrid.tsx` | cpd アニメ駆動部 |
+| `src/components/v2/SettingsScreen.tsx` / `Slider.tsx` | sfChangeSpeed(b) スライダー UI |
+| `src/lib/v2/badges.ts` | b≤0.10「小さい」判定（B-07/B-08） |
+| 関連テスト | `patch.test.ts`（cpd）・`roundGen.test.ts`（周波数割当）・`gameView.test.ts`（quantizeCpd）・`badges.test.ts`（b 閾値） |
+
+#### E. その他 v3 で再設計され死にコード化する見込み（参考）
+- `src/lib/v2/gameMachine.ts` の `config`（gridSize/roundSeconds/roundCount/rotationSpeed/sfChangeSpeed/scoringMode 直接指定）→ v3 は「レベル番号 → 5 変数」へ置換（spec §4）。
+- 手動スライダー UI 全般（n/m/r/a/b の `Slider.tsx` 利用箇所・`SettingsScreen`）→ v3 は範囲設定 + 変化順 UI に置換（spec F-13）。
+- `gaboreye:v2:*` 名前空間（`src/state/keys.ts`）→ v3 は `gaboreye:v3:*` で再設計（spec §7・F-11）。マイグレーション（`src/state/migration.ts`）は v1〜v2 全消去に拡張。
+
+> **削除順の指針**：上記 A〜D は単独で消すと依存が連鎖して落ちるため、spec §8 の各スプリントで「該当機能の v3 実装 ↔ 旧コード撤去」を同時に行う（S2 レベル中核 → C/E、S3 データ層 → 名前空間/スキーマ、S4 ゲームコア → A/B/D、S5 描画/結果 → SessionResultCard 系、S7 履歴 → スコア折れ線、S8 バッジ → 高スコア軸）。S1 はリスト確定まで。
+
+---
+
+## V3-S2. v3.0 — S2：レベルシステム中核ロジック（§4 / F-04）（2026-06-10）
+
+> **純ロジック層のみ**（描画・永続化・UI は S3 以降）。spec §4（レベルシステム）・§5 F-04（レベル昇降）・§7.3 LevelState 準拠。
+
+### V3-S2.1 結論
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npm run typecheck`（tsc strict） | **エラー 0（PASS）** | — |
+| `npm test`（Jest） | **52/53 スイート・517/518 件 PASS** | S2 前 469/470 → **+48 件**（`tests/lib/v3/level.test.ts`）。残り 1 赤は §V3.4 の既知 authored-broken（`SessionResultCard.test.tsx`、本 S2 と無関係） |
+| `npm run build:web` | 挙動不変（未配線） | S2 は純ロジック追加で App.tsx から未参照のため web バンドルへの影響なし。S3 の初回配線時に確認 |
+| Expo SDK | 54 系維持・native 依存追加なし | — |
+
+### V3-S2.2 追加ファイル
+
+| ファイル | 役割 |
+|---|---|
+| `src/lib/v3/level.ts`（新規） | レベルシステム中核の純関数群。値集合（§4.1）/ mixed-radix オドメータ `levelToParams`・`paramsToLevel`・`totalLevels`（§4.2）/ レベル昇降 `applyResult`・`initialLevelState`（§4.4・F-04）/ 範囲クランプ `clampLevelToRange`・`clampLevelState`（§4.5）。型：`VariableKey`/`Direction`/`GridSize`/`LevelParams`/`VariableRanges`/`LevelState`/`LevelDelta` |
+| `tests/lib/v3/level.test.ts`（新規） | 48 件。値集合・段数・境界（L1/L2/L4→L5/L20→L21/L40→L41/L80→L81/L720）・全 720 一意・往復恒等・部分範囲・代替変化順・昇降（クリア/失敗/2連続失敗/クランプ/連続失敗永続シナリオ）・範囲変更クランプ |
+
+### V3-S2.3 S3 への申し送り
+
+- **永続化未実装（S3 担当）**：`LevelState`（`gaboreye:v3:levelState`）と `Settings.variableRanges`/`variableOrder` の読み書き、F-11 起動時 v3 初期化（currentLevel=1）。S2 は AsyncStorage 非依存の純関数のみ。
+- `applyResult`/`clampLevelState`/`levelToParams` のデフォルト引数はフル範囲・デフォルト変化順。S3 以降は `Settings` 由来の ranges/order を渡す。
+- `VariableRanges` 各配列は VALUE_SETS 部分集合かつ易→難順を保つ前提。各変数 1 値以上の強制（F-13）は S3 の設定 setter/UI 側の責務。
+- 死にコード撤去（run.md §V3.5 C/E：v2 gameMachine の config・手動スライダー系）は本 S2 では未実施（新規ロジック追加に集中）。v2 コードは S4 のゲームコア v3 化と同時に撤去予定。
+
+---
+
+## V3-S3. v3.0 — S3：データ層・設定・範囲/変化順・v3 初期化（§7 / F-11 / F-13 / §4.5）（2026-06-10）
+
+> **データ/永続化/ロジック層のみ**（設定 UI 画面 S3-1/S3-2 は S5/S7）。spec §7 データモデル（`gaboreye:v3:*`）・F-11・F-13・§4.5 準拠。
+
+### V3-S3.1 結論
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npm run typecheck`（tsc strict） | **エラー 0（PASS）** | — |
+| `npm test`（Jest） | **59/60 スイート・585/586 件 PASS** | S3 前 517/518 → **+68 件**（v3 state/lib 7 スイート）。残り 1 赤は §V3.4 の既知 authored-broken（`SessionResultCard.test.tsx`、スコア依存・本 S3 無関係） |
+| `npm run build:web` | **成功（Exported: dist）** | v3 データ層は App.tsx から未参照のため web バンドル影響なし。起動フロー配線（S7）時に再確認 |
+| Expo SDK | 54 系維持・native 依存追加なし | 低レベル I/O は既存 `state/store.ts`（AsyncStorage）を再利用 |
+
+### V3-S3.2 実装方針：v3 データ層は `src/state/v3/` 並行モジュール
+
+v2.0 アプリ（App.tsx → AppRoot → 全 v2 screens/components/lib）は今も `src/state/schema.ts`（v2 `Settings`/`scoringMode`/`SessionRecord` 等）・`src/state/keys.ts`（`gaboreye:v2:*`）に全面依存。in-place v3 化は 50+ ファイル/数百テストを連鎖崩壊させるため、S2（`src/lib/v3/`）と同様に **v3 を `src/state/v3/` の並行モジュールで新設**。v2 state は S5 以降の UI 差し替えまで温存し、リグレッション 0 を維持。
+
+### V3-S3.3 追加ファイル
+
+| ファイル | 役割 |
+|---|---|
+| `src/state/v3/schema.ts`（新規） | §7 型 + 既定値。`Settings`（variableRanges/variableOrder/darkMode/sound/haptics/oneEyeGuidance のみ）・`GameRecord`・`DailyStats`（highestLevelReached/gameCount）・`Streak`・`PlayStats`（totalGames）・`BadgeStatus`（B-01〜11）・`UserProfile`（schemaVersion '3.0.0'）。`V3_PREFIX`・`LEGACY_PREFIXES`（v1/v1.1/v1.2/**v2**）。v2 廃止フィールド不在 |
+| `src/state/v3/keys.ts`（新規） | `gaboreye:v3:*` キー（§7.10）。`gameKey`/`dailyStatsKey`/`badgeKey` |
+| `src/state/v3/repository.ts`（新規） | 型付き load/save（単一 + Game/Daily/Badge コレクション + resetNotice フラグ）。`store.ts` を再利用。load 時 Settings sanitize |
+| `src/state/v3/settings.ts`（新規） | **F-13 中核**。範囲正規化（§4.1 部分集合・易→難順・最低1値）・変化順検証・setter・`settingsTotalLevels`・`updateSettings`/**`updateLevelSettings`（§4.5 クランプ + 連続失敗0 配線）** |
+| `src/state/v3/migration.ts`（新規） | **F-11**。`runStartupMigration`（v1〜v2 全消去 → v3 初期化 L1/0/0 → `shouldShowNotice`）。冪等 |
+| `src/state/v3/dataReset.ts`（新規） | **F-13 全削除** → L1/0/0・Settings デフォルト。resetNotice フラグ保持 |
+| `src/state/v3/gameRecorder.ts`（新規） | **§7.4〜§7.7 記録永続化**。`recordCompletedGame`（GameRecord + Daily max(クリア基準) + Streak + PlayStats.totalGames+1）。バッジは S9 |
+| `src/lib/v3/statsAggregation.ts`（新規） | 集計純関数（Daily/Streak/Play、dateUtil 再利用） |
+| `src/state/v3/index.ts`（新規） | v3 データ層公開バレル |
+| `tests/state/v3/*.test.ts`（5）・`tests/lib/v3/statsAggregation.test.ts`（新規） | +68 件 |
+
+### V3-S3.4 S4/S5/S7 への申し送り
+
+- **v2 撤去は S4 以降**：S3 は v2 を一切壊さない。run.md §V3.5 の削除順（S4 ゲームコア → A/B/D、S5 描画 → SessionResultCard、S7 履歴・起動 → v2 state/migration/keys/schema 撤去）で同時撤去。
+- **起動フロー切替（S7）**：App.tsx の v2 `runStartupMigration` を `src/state/v3/migration.runStartupMigration` に差し替え、`shouldShowNotice` で RZ-1 表示。この切替時に v2 state を撤去。
+- **設定タブ（S5）**：`src/state/v3/`（`settingsTotalLevels`・`updateLevelSettings().clamped`・各 setter）を import。RG-1/OR-1/SegmentedControl/Toggle/DataResetNotice を組む。
+- **バッジ判定（S9）**：`recordCompletedGame` に BadgeStatus 付与を追加配線（永続化基盤は S3 で用意済み）。
+- データモデル §7 からの逸脱は**無い**（`schema.test.ts` で構造検証）。
+
+---
+
+## V3-S4. v3.0 — S4：ゲームコア（生成・選択・クリア判定・振動回転）（F-01 ロジック / F-03 / §4.3）（2026-06-10）
+
+> **ロジック層のみ**（描画・✅/❌ オーバーレイ・カウントダウン UI は S5）。spec §4.3（クリア/失敗）・§4.1（5 変数）・F-01 ロジック・F-03 判定準拠。`src/lib/v3/` に新設。App.tsx からは未配線（S5 で接続）。
+
+### V3-S4.1 結論
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npm run typecheck`（tsc strict） | **エラー 0（PASS）** | — |
+| `npm test`（Jest） | **62/63 スイート・640/641 件 PASS** | S3 前 585/586 → **+55 件**（v3 新規 3 スイート：patch 23 / roundGen 16 / gameMachine 16）。残り 1 赤は §V3.4 の既知 authored-broken（`SessionResultCard.test.tsx`、スコア依存・本 S4 無関係・S5 で UI 差し替え時に自然解消） |
+| `npm run build:web` | **成功（Exported: dist）** | v3 ゲームコアは App.tsx から未参照のため web バンドル影響なし（AppEntry ≈ 1.87 MB・S3 から不変）。描画配線（S5）時に再確認 |
+| Expo SDK | 54 系維持・native 依存追加なし | Skia 等不使用。回転は S5 で transform による |
+
+### V3-S4.2 追加ファイル
+
+| ファイル | 役割 |
+|---|---|
+| `src/lib/v3/patch.ts`（新規） | v3 パッチモデル。**回転のみ**（cpd 時間変化＝死にコード候補 D を v3 では不採用）。`patchOrientationAt`（一方向=単調 / 振動=三角波往復）・`oscillationOffsetDeg`・`normalizeDeg180`・`isChanging`。`OSCILLATION_AMPLITUDE_DEG=30`（体感調整定数・AS-21） |
+| `src/lib/v3/roundGen.ts`（新規） | v3 ラウンド生成。**個数はレベルで確定**（死にコード候補：v2 の個数ランダム抽選を v3 では不採用）。`generateRound`/`generateRoundFromLevel`/`levelParamsToRoundGen`/`generateSpacedAngles`。回転パッチは全て同 speed/direction、静止は離散初期角度で固定（NF-28b） |
+| `src/lib/v3/gameMachine.ts`（新規） | v3 ゲーム機械。**1 ゲーム=1 ラウンド=1 レベル挑戦**（r ラウンド廃止）。`initGame`/`gameReducer`（TOGGLE/TIMEOUT のみ・確定ボタンなし）・`isAllCorrect`（§4.3）・`deriveReveal`（✅/❌ 分類）。結果は clear/fail の 2 値（部分点・0〜100 スコア廃止） |
+| `tests/lib/v3/{patch,roundGen,gameMachine}.test.ts`（新規 3 スイート） | +55 件。振動往復性/振幅/周期/折り返し停止/角速度保存・個数固定・rng 決定論・即時締め切り/TIMEOUT 判定・deriveReveal |
+
+依存：v2 `rng.ts`（汎用 PRNG・スコア非依存）と S2 `level.ts` を再利用。
+
+### V3-S4.3 振動（往復回転）実装（NF-28c / system §4.1 / AS-11）
+
+- 三角波：位相 `sign×speed×t` を周期 `4A`（A=30°）の三角波に写像。1 往復 = `4A/speed` 秒。
+- 一方向との弁別＝1 周期で初期角度へ復帰 vs 単調離脱。静止との弁別＝折り返しで瞬間角速度 0（振動が難しい根拠）。角速度保存＝折り返し点以外で |角速度| ≈ speed。いずれも単体テストで担保。
+
+### V3-S4.4 S5/S7 への申し送り
+
+- **死にコード撤去は未着手**（A/B/D：v2 scoring/gameMachine/roundGen/patch）。理由＝今も live な v2 UI チェーン（`App.tsx → AppRoot → GameScreen → gameMachine/scoring/roundGen/patch/ConfirmButton/GaborGrid`）が依存しており、撤去すると build:web が壊れる。**S5 で v3 ゲーム画面に差し替えると同時に撤去**（run.md §V3.5 の削除順どおり）。`src/lib/v2/rng.ts` は v3 再利用中のため撤去しない。
+- **S5 描画配線**：`initGame(config, rng)` で開始 → `useGameTimer` 相当で経過秒 t を `patchOrientationAt(patch, t)` に渡し描画 → タップで `gameReducer(state, {type:'TOGGLE',index})` → 締め切り（即時 clear or TIMEOUT）後 `deriveReveal(patches, selected)` で ✅/❌ を配置。`closedByAllCorrect` で開示時間を分岐（system §6 ＝即時クリアも 1.5 秒開示推奨）。
+- **S7 ゲーム終了処理**：`gameReducer` は result（clear/fail）を確定するだけ。レベル増減（`applyResult`・S2）と記録（`recordCompletedGame`・S3）はホームフローが `result` を受けて呼ぶ。中断（F-07）はどちらも呼ばない。
+
+---
+
+## V3-S5. v3.0 — S5：ゲーム描画・レベル/個数表示・結果開示 UI（F-01 描画 / F-02 / F-03 / F-12）（2026-06-10）
+
+> S4 の v3 ゲームコアを画面に配線。ガボール格子描画・レベル/個数表示・カウントダウン・✅/❌ 結果開示を実装。
+> v3 を `src/components/v3/`・`src/screens/v3/`・`src/lib/v3/gameView.ts` の**並行モジュール**で新設。
+> v2 ゲーム UI チェーンは温存（AppRoot 本配線 = S6/S7 で同時撤去。§V3-S5.4 申し送り）。
+
+### V3-S5.1 結論
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npm run typecheck`（tsc strict） | **エラー 0（PASS）** | — |
+| `npm test`（Jest） | **65/66 スイート・674/675 件 PASS** | S4 前 640/641 → **+34 件**（v3 新規 3 スイート：gameView 9 / gameComponents 19 / GameScreen 6）。残り 1 赤は §V3.4 既知 authored-broken（`SessionResultCard.test.tsx`、S6/S7 で自然解消） |
+| `npm run build:web`（既定 = v2） | **成功（Exported: dist）** | AppEntry ≈ 1.9 MB。既定フラグなしビルドは従来の v2 アプリ（リグレッションなし） |
+| `npm run build:web`（`EXPO_PUBLIC_V3_GAME=1`） | **成功** | v3 ゲーム開発ハーネスを出力。Playwright で 375/1280/360/L41 を目視確認 |
+| Expo SDK | 54 系維持・native 依存追加なし | 回転は `GaborPatch` の View transform（Skia 不使用） |
+
+### V3-S5.2 追加 / 変更ファイル
+
+| ファイル | 役割 |
+|---|---|
+| `src/lib/v3/gameView.ts`（新規） | カウントダウン段階色 `countdownTier`・aria-live `countdownAriaLive`・開示インターバル `revealIntervalMs`（即時クリア/時間切れとも 1.5 秒） |
+| `src/lib/v3/a11yAnnounce.ts`（新規） | SR アナウンス薄ラッパ（ゲーム開始時のレベル/個数読み上げ） |
+| `src/components/v3/LevelBadge.tsx`（LB-1 新規） | レベル番号ピル「レベル {n}」（inline/large）。`levelV3` トークン |
+| `src/components/v3/CountBanner.tsx`（CB-1 新規） | 「◯個探せ！」個数案内（26px Bold） |
+| `src/components/v3/CountdownTimer.tsx`（CD-1） | 数字のみ・3 段階色・太字補強・点滅なし |
+| `src/components/v3/GameTopBar.tsx`（GB-1） | X + カウントダウン + **レベル番号ピル**（v3 改訂） |
+| `src/components/v3/GaborPatchCell.tsx`（GG-2） | v3 PatchDef を `patchOrientationAt(t)` で transform 回転描画。cpd 固定（回転のみ） |
+| `src/components/v3/GaborGrid.tsx`（GG-1） | n×n 格子。レイアウト算出 `computeGridEdge/Gap/PatchSize` を純関数 export |
+| `src/components/v3/ResultMark.tsx`（OV-2） | ✅実線(correct)/✅薄め(missed)/❌(wrong) |
+| `src/components/v3/AggregateResultBadge.tsx`（OV-3） | 総合「クリア」/「失敗」（色 + アイコン + テキスト、NF-12） |
+| `src/components/v3/ResultOverlayLayer.tsx`（OV-1） | 200ms フェードイン + `aria-live=assertive`「クリア/失敗」読み上げ |
+| `src/screens/v3/GameScreen.tsx`（新規） | gameMachine + useGameTimer + 描画 + 開示を配線。`onAbort`/`onResolved(result)` 委譲 |
+| `src/screens/v3/GameDevHarness.tsx`（新規） | 評価用暫定エントリ（レベル固定、結果で applyResult 簡易反映、永続化なし） |
+| `src/theme/tokens.ts`（変更） | `levelV3` / `resultV3` トークン追加（system §1.3・§1.4） |
+| `src/i18n/ja.ts`（変更） | `gameV3.*` / `resultV3.*` キー追加（v2 `game.*`/`result.*` は温存） |
+| `App.tsx`（変更） | `EXPO_PUBLIC_V3_GAME=1` のとき `GameDevHarness` を表示する分岐を冒頭に追加（既定は v2 アプリ） |
+| `tests/lib/v3/gameView.test.ts`・`tests/components/v3/gameComponents.test.tsx`・`tests/screens/v3/GameScreen.test.tsx`（新規 3 スイート） | +34 件 |
+
+依存：`useGameTimer`（`hooks/v2/`、スコア非依存の汎用タイマー）と `Rng`（`lib/v2/rng.ts`）を再利用。
+
+### V3-S5.3 v3 ゲーム画面への到達方法（評価用）
+
+```bash
+# Web（推奨）：v3 ゲームハーネスを有効化してエクスポート
+EXPO_PUBLIC_V3_GAME=1 npx expo export --platform web --clear
+npx serve -s dist -l 4613
+# http://localhost:4613/            … 既定 L7（個数3・3x3・一方向）
+# http://localhost:4613/?level=21   … 振動確認（デフォルト梯子で direction=振動 に入る最初の域は L21〜40 / L61〜80）。?level=N（N=1〜720）で任意レベル
+#   ※ S5 当初の「?level=41=振動域」は誤記。振動は L21〜40・L61〜80（S6 で訂正）。
+```
+
+> **S6 で本ハーネス（GameDevHarness）は撤去**。v3 アプリへの本配線が完了したため、評価は
+> 既定の `npm run build:web`（v3 アプリ）で行う（§V3-S6.3）。
+
+```bash
+# テスト（決定論 rng + fake timers で clear/fail/中断を検証）
+npx jest tests/screens/v3/GameScreen.test.tsx
+```
+
+> 既定の `npm run build:web`（フラグなし）は従来の v2 アプリを出力する（リグレッションなし）。
+> `?level=` は Web のクエリ override（`GameDevHarness`、ハーネス限定・native は無視）。`EXPO_PUBLIC_V3_LEVEL` は computed access のため inline されず効かない点に注意（クエリを使う）。
+
+### V3-S5.4 S6/S7 への申し送り（v2 撤去）
+
+- **本 S5 では v2 ゲーム UI / スコア系ロジックを撤去していない**。`App.tsx → AppRoot`（v2）が今もゲーム/履歴/設定/タブを担い、v2 ゲームチェーンに全面依存しているため。撤去は run.md §V3.5 の削除順どおり **S6（タブ・中断）/S7（起動フロー・ホーム結果・レベル増減/記録）で AppRoot を v3 化すると同時**に行う。
+- **S6 配線**：`GameScreen v3` に `onAbort`（中断ダイアログ F-07）・`paused`（ダイアログ中の一時停止）・タブバーを接続。
+- **S7 配線**：`onResolved(result, state)` を受けて `applyResult`（S2）でレベル増減・`recordCompletedGame`（S3）で記録 → ホーム結果（RC-1）→「もう一度」。中断はどちらも呼ばない。距離リマインド → 自動開始も S7。
+- **撤去対象（S6/S7 で同時）**：`screens/v2/GameScreen`・`components/v2/{GaborGrid,GaborPatchCell,GameTopBar,CountdownTimer,ResultMark,ResultOverlayLayer,AggregateResultBadge,ConfirmButton,SessionResultCard}`・`lib/v2/{scoring,gameMachine,roundGen,patch,gameView}`・関連 v2 テスト。`SessionResultCard` 撤去で §V3.4 の赤テストも解消。`useGameTimer`/`rng` は v3 が再利用中のため撤去せず移設/共有。`App.tsx` の `EXPO_PUBLIC_V3_GAME` 暫定分岐は S7 完了時に除去。
+
+---
+
+## V3-S6. v3.0 — S6：ボトムタブナビ・中断ダイアログ（F-05 / F-07）・AppRoot v3 本配線（2026-06-10）
+
+> S5 の v3 ゲーム画面を **AppRoot v3** に配線し、`App.tsx` を v3 アプリに切替えた。
+> 3 タブ（ホーム/履歴/設定）切替・プレイ中の中断ダイアログを実装。v2 ゲーム UI チェーンの撤去に着手。
+
+### V3-S6.1 結論
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npm run typecheck`（tsc strict） | **エラー 0（PASS）** | — |
+| `npm test`（Jest） | **59/60 → 59/59 スイート・626/626 件 全 PASS** | S5 は 65/66 スイート・674/675（うち 1 赤 = 既知 authored-broken `SessionResultCard.test.tsx`）。S6 で v2 ゲーム UI チェーン（AppRoot/GameScreen/BottomTabBar/ConfirmButton/SessionResultCard）とその v2 テストを撤去し、**赤テストが解消・全件グリーン**。新規 `tests/screens/v3/AppRoot.test.tsx`（+9 件）。撤去差分があるため件数は 674 → 626 |
+| `npm run build:web`（**既定 = v3**） | **成功（Exported: dist）** | **既定ビルドが v3 アプリになった**。AppEntry ≈ **1.07 MB**（v2 ゲームチェーン撤去で S5 の ≈1.9 MB から縮小）。`npx serve -s dist` で HTTP 200・`<title>GaborEye</title>` |
+| Playwright 検証 | **PASS（360/375/1280）** | タブ 3 つ・aria-selected・プレイ中タブ/× で中断ダイアログ・キャンセル継続・OK で当該タブ遷移を目視 + 自動アサート。`temp-images/s6/*.png`（gitignore） |
+| Expo SDK | 54 系維持・native 依存追加なし | AdManager native/web 分割は維持（広告 native 不変） |
+
+### V3-S6.2 追加 / 変更 / 削除ファイル
+
+**新規（v3）**
+| ファイル | 役割 |
+|---|---|
+| `src/components/v3/BottomTabBar.tsx`（NV-1） | 3 タブ（ホーム/履歴/設定）。色+上辺3pxインジケータ+太字+塗り/線アイコンで非依存（NF-12）。role=tablist/tab + aria-selected。48pt+/bottom セーフエリア |
+| `src/components/v3/ConfirmDialog.tsx`（DG-1） | 2 択確認（中断/削除汎用）。role=dialog/aria-modal/aria-labelledby、初期フォーカス=安全側「続ける」、Esc=キャンセル（Web）。ボタン 56pt+ |
+| `src/screens/v3/AppRoot.tsx` | **v3 アプリ骨格**。タブ切替・ホームゲーム・中断ダイアログ統括。プレイ中の他タブ/× で F-07 ダイアログ、非進行中は自由遷移。OK=記録/レベル不変（§4.4） |
+| `src/screens/v3/TabPlaceholderScreen.tsx` | 履歴(S8)/設定(S7) 暫定プレースホルダ（「準備中」）。セーフエリア準拠 |
+| `tests/screens/v3/AppRoot.test.tsx`（+9 件） | F-05 タブ/aria-selected、F-07 ダイアログ（タブ起点/× 起点・キャンセル継続・OK 遷移・レベル不変）・非進行中自由遷移 |
+
+**変更**
+| ファイル | 変更 |
+|---|---|
+| `App.tsx` | v2 アプリ（v2 AppRoot/Onboarding/v2 migration）→ **v3 AppRoot 本配線**。v3 `runStartupMigration`（F-11）+ v3 Settings/UserProfile ロード + DataResetNotice。`EXPO_PUBLIC_V3_GAME` ハーネス分岐を撤去・統合 |
+| `src/screens/v3/GameScreen.tsx` | `onPlayingChange?(playing)` を追加（締め切り前=true/開示後=false）。AppRoot が中断判定（F-05/F-07：非進行中は自由）に使う |
+| `src/i18n/ja.ts` | `abortV3.*`（「レベルも変わりません」改訂本文）・`tabPlaceholderV3.*` 追加 |
+| `docs/run.md` | 「?level=41=振動域」誤記を「振動確認は ?level=21（振動域 L21〜40/L61〜80）」に訂正 |
+
+**削除（v2 撤去・v3 が代替）**
+| ファイル | 理由 |
+|---|---|
+| `src/screens/v2/AppRoot.tsx` | v3 AppRoot が代替（タブ/中断/フロー統括） |
+| `src/screens/v2/GameScreen.tsx` | v3 GameScreen（S5）が代替 |
+| `src/components/v2/BottomTabBar.tsx` | v3 BottomTabBar が代替 |
+| `src/components/v2/ConfirmButton.tsx`（BN-1） | 採点方式②の確定ボタン。v3 に確定ボタンは存在しない（§V3.5 A） |
+| `src/components/v2/SessionResultCard.tsx` | 0〜100 スコア結果カード。v3 はクリア/失敗・レベル変化（S7 RC-1 で実装）。**撤去で §V3.4 赤テスト解消** |
+| `src/screens/v3/GameDevHarness.tsx` | S5 評価用暫定ハーネス。本配線完了で不要 |
+| 上記の v2 テスト 8 本 | `AppRoot/startupFlow/AppRootFeedback/GameScreen/GameScreenFeedback`（screens v2）・`BottomTabBar/SessionResultCard`（components v2）・`integration/s10FullFlow`。仕様廃止（v2 スコア/採点/セッション）に伴い削除 |
+| `tests/components/v2/gameComponents.test.tsx`（一部） | ConfirmButton describe ブロックのみ削除（他の v2 描画コンポーネントは温存） |
+
+### V3-S6.3 v3 アプリ起動・評価手順（既定が v3 になった）
+
+```bash
+cd /Users/np_202212_11/projects/gabor3
+npm test                       # Jest 全テスト（59/59 スイート・626/626 件 全 PASS）
+npm run typecheck              # tsc --noEmit（エラー 0）
+npm run build:web              # 本番 Web バンドル → dist/（既定 = v3 アプリ。AppEntry ≈ 1.07 MB）
+npx serve -s dist -l 4621      # http://localhost:4621/ で配信。HTTP 200 / <title>GaborEye</title>
+#  → 起動でホームタブの v3 ゲームが現在レベルで開始。下部 3 タブで切替。
+#     プレイ中の他タブ/× で中断ダイアログ（OK=記録/レベル不変、キャンセル=継続）。
+```
+
+```bash
+# Android（Expo Go）
+npm start                      # QR → Expo Go（CLAUDE.md §6）
+```
+
+### V3-S6.4 v2 撤去の判断と S7/S8 への申し送り
+
+- **撤去した範囲**：v3 が S6 で代替する **タブ・中断・ゲーム画面チェーン**（v2 AppRoot/GameScreen/BottomTabBar/ConfirmButton/SessionResultCard）とその v2 テスト。`App.tsx` も v3 へ全面切替。
+- **温存した v2 コード（S7/S8/S9/S10 がまだ参照）と理由**：
+  - `lib/v2/{scoring,gameMachine,roundGen,patch,gameView}`・`state/{statsRecorder,badgeRecorder,sessionRecorder}` … **S8 履歴/S9 バッジの v2 集計が依存中**。v3 の `recordCompletedGame`/`statsAggregation`（S3）へ S7/S8 で差し替えるまで残す。
+  - `screens/v2/{SettingsScreen,HistoryScreen,DistanceReminderScreen,OnboardingScreen,IdleHomeScreen}` … **S7 設定/起動フロー・S8 履歴**で v3 化するまで残す（現状 App.tsx からは未参照＝デッド気味だが、S7/S8 の差し替え基準点として保持）。
+  - `components/v2/{GaborGrid,GaborPatchCell,GameTopBar,CountdownTimer,ResultMark,ResultOverlayLayer,AggregateResultBadge}` … 現状 v2 GameScreen 撤去で **App から未参照（オーファン）**だが、v2 描画テスト（`gameComponents`/`ResultOverlayLayer`/`webAriaComponents`）が緑のまま残るため**今回は撤去せず温存**。S7 完了で v2 起動フローを完全に外したタイミングで一括撤去推奨。`CountdownTimer`(v2) は `DistanceReminderScreen`(v2) が依存中のため S7 まで必須。
+  - `lib/v2/rng`・`hooks/v2/useGameTimer` … **v3 が再利用中**。撤去せず共有継続（将来 v3 へ移設可）。
+  - `state/{schema,keys,repository,migration,settings,dataReset}`（v2）… v2 SettingsScreen/HistoryScreen が依存中。v3 は `state/v3/*` 並行モジュールで稼働。S7/S8 で v2 起動・履歴を外したら撤去。
+  - `components/v2/{DataResetNotice,AdManager*}` … **App.tsx（v3）が現役で使用**（RZ-1 通知・広告）。撤去しない。RZ-1 の v3 化（i18n キー化）は S7。
+- **既知の暫定（S7 で本実装）**：
+  - 起動フローが簡素化されている（**オンボーディング・距離リマインドを S6 では挟まず**、直接ホームゲーム開始）。F-06 の初回オンボ → 距離リマインド → 自動開始は S7。
+  - ホームの結果が暫定（`applyResult` のメモリ反映で次ゲーム生成のみ。**ホーム結果カード RC-1・記録永続化 `recordCompletedGame`・「もう一度」は未配線**）。S7 で `onResolved` を記録/RC-1 へ接続。
+  - 中断後の × 起点の着地は「同レベルで新ゲーム再生成」（IdleHome 相当の待機画面は S7 のホームフロー設計時に再検討）。
+- **データモデル変更なし**（§7 凍結スキーマ準拠。S6 はスキーマに触れていない）。
+
+---
+
+## V3-S7. v3.0 — S7：ホームタブ・起動フロー・免責（F-08 / F-06 / F-10 / F-11 通知 / §4.4 本結線）（2026-06-10）
+
+> S5/S6 の v3 ゲーム・タブを起動フローとホームフローに本配線。**レベル増減（applyResult）と記録
+> （recordCompletedGame）をここで本結線・永続化**。v2 起動フロー・描画オーファン群を一括撤去。
+
+### V3-S7.1 結論
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npm run typecheck`（tsc strict） | **エラー 0（PASS）** | — |
+| `npm test`（Jest） | **59/59 スイート・614/614 件 全 PASS** | S6 626 → 614。S7 追加（homeFlow 5 / homeComponents 6 / Onboarding v3 7 / Distance v3 5 / AppRoot S7 +5）と v2 撤去（gameComponents/ResultOverlayLayer/Onboarding/Distance v2 テスト）の差し引き。赤 0 維持 |
+| `npm run build:web`（既定 = v3） | **成功（Exported: dist）** | AppEntry ≈ **1.1 MB**。`npx serve -s dist` で HTTP 200・`<title>GaborEye</title>` |
+| Playwright 検証 | **PASS（375/360/1280）** | 起動→オンボ(免責/年齢/距離/概要)→距離リマインド→ゲーム→結果カード→もう一度→距離 を目視 + コンソールエラー 0。`temp-images/s7/*.png`（gitignore） |
+| Expo SDK | 54 系維持・native 依存追加なし | AdManager native/web 分割維持（広告 native 不変） |
+
+### V3-S7.2 追加 / 変更 / 削除ファイル
+
+**新規**
+| ファイル | 役割 |
+|---|---|
+| `src/state/v3/homeFlow.ts` | **§4.4 / F-04 / §7.4-7.7 本結線**。`resolveCompletedGame`：applyResult → saveLevelState（永続）→ recordCompletedGame。levelDelta を返す。中断は呼ばない |
+| `src/components/v3/LevelDeltaIndicator.tsx`（LD-1） | +1/±0/−1 を色+矢印形+テキストで（NF-12）。−1 暗橙（責めない）。aria-live=polite |
+| `src/components/v3/HomeResultCard.tsx`（RC-1） | クリア/失敗 + LD-1 + 現在レベル(LB-1 large) + ストリーク + もう一度(64px)。role=region 読み上げ |
+| `src/components/v3/DataResetNotice.tsx`（RZ-1 i18n 化） | F-11 通知（dataResetV3.* キー）。v2 ハードコード版を置換 |
+| `src/screens/v3/OnboardingScreen.tsx`（ON-1） | 4 ステップ・タップ ≤6。免責同意ゲート・年齢(70 代警告)・距離・概要(回転のみ)。onboardingV3.* |
+| `src/screens/v3/DistanceReminderScreen.tsx`（DR-1） | 「画面から {n}cm」36px・v3 CountdownTimer large・3 秒自動進行・片眼補助・X 中断。distanceV3.* |
+| `tests/state/v3/homeFlow.test.ts`(5)・`tests/components/v3/homeComponents.test.tsx`(6)・`tests/screens/v3/{OnboardingScreen,DistanceReminderScreen}.test.tsx`(7+5) | +23 件 |
+
+**変更**
+| ファイル | 変更 |
+|---|---|
+| `src/screens/v3/AppRoot.tsx` | ホームタブに 3 サブフェーズ（distance→playing→result）。距離リマインド→自動開始→結果カード→もう一度。`onResolveGame` 注入で本結線。F-07 中断ダイアログ維持 |
+| `App.tsx` | F-11 → ロード → 初回オンボ（完了で UserProfile 保存）→ AppRoot（initialHomePhase='distance'・onResolveGame=resolveCompletedGame）。RZ-1 を v3 へ |
+| `src/theme/tokens.ts` | `levelDeltaV3`（up/same/down）追加 |
+| `src/i18n/ja.ts` | `homeV3` / `levelDeltaV3` / `onboardingV3` / `distanceV3` / `dataResetV3` 追加 |
+| `src/state/v3/index.ts` | homeFlow を公開 |
+| `tests/screens/v3/AppRoot.test.tsx` | S7 フローに更新（距離リマインド再入・結果カード・+1/±0/−1・もう一度） |
+| `tests/a11y/webAriaComponents.test.tsx` | GaborPatchCell/PatchDef を v2 → **v3** に差し替え |
+
+**削除（v2 撤去・v3 が代替）**
+| ファイル | 理由 |
+|---|---|
+| `src/screens/v2/{OnboardingScreen,DistanceReminderScreen,IdleHomeScreen}.tsx` | v3 が代替（起動フロー・ホーム） |
+| `src/components/v2/{GaborGrid,GaborPatchCell,GameTopBar,CountdownTimer,ResultMark,ResultOverlayLayer,AggregateResultBadge,DataResetNotice}.tsx` | v3 描画/通知が代替（§V3-S6.4 推奨の一括撤去） |
+| `tests/screens/v2/{OnboardingScreen,DistanceReminderScreen}.test.tsx`・`tests/components/v2/{gameComponents,ResultOverlayLayer}.test.tsx` | 上記撤去に伴う |
+
+### V3-S7.3 v3 アプリ起動・評価手順（S6 から不変、既定 = v3）
+
+```bash
+cd /Users/np_202212_11/projects/gabor3
+npm test                       # Jest 全テスト（59/59 スイート・614/614 件 全 PASS）
+npm run typecheck              # tsc --noEmit（エラー 0）
+npm run build:web              # 本番 Web バンドル → dist/（既定 = v3 アプリ。AppEntry ≈ 1.1 MB）
+npx serve -s dist -l 4631      # http://localhost:4631/ で配信。HTTP 200
+#  → 初回：オンボ(免責→年齢→距離→概要)→距離リマインド→ホームで現在レベル自動開始。
+#     1 ゲーム完了→結果カード(クリア/失敗・レベル変化・現在レベル・ストリーク)→「もう一度」。
+#     2 回目以降：オンボなし→距離リマインド→前回 currentLevel から。
+#  ※ ブラウザの localStorage を消すと「初回」状態に戻る（オンボ再表示）。
+```
+
+### V3-S7.4 S8 への申し送り
+- **設定タブ（F-13）未実装**：範囲設定/変化順/継承項目/免責再閲覧の設定 UI は本 S7 範囲外。DisclaimerPanel（DC-1）は稼働中・設定から呼べる土台あり。設定タブ実装時に DisclaimerPanel の「閲覧のみ」モードも追加。
+- **温存した v2**：`screens/v2/{HistoryScreen,SettingsScreen}`（S8 履歴・設定本実装まで）、`lib/v2/{scoring,gameMachine,roundGen,patch,gameView}`・`state/v2 系`（HistoryScreen/SettingsScreen が依存）、`components/v2/{Toggle,SegmentedControl,SettingRow,StatTile,BadgeCell,BadgeGrid,BadgeAwardToast,LineChart,EmptyState,NumberSpinner,SkipLink,ConfirmDialog,DisclaimerPanel,AdManager*}`。S8 で履歴を v3 化（`state/v3/statsAggregation`・`loadAllDailyStats` 等）すると同時に v2 集計/HistoryScreen を撤去推奨。
+- **記録は永続化済み**：S8 履歴グラフは `state/v3/repository.loadAllDailyStats` / `loadStreak` / `loadPlayStats` を読むだけでよい（S7 で書き込み配線済み）。
+- **データモデル変更なし**（§7 凍結スキーマ準拠）。
+
+---
+
+## V3-S8. v3.0 — S8：履歴タブ・レベル進捗グラフ（F-09 グラフ部・DailyStats/Streak/PlayStats 集計）（2026-06-10）
+
+### V3-S8.1 結論
+
+| 項目 | 状態 |
+|---|---|
+| `npm test`（Jest） | **緑（全 PASS）**。58 スイート / **602 件**（S7=587 → +15）。新規：historyView 16 / chartGeometry 13 一部 + HistoryScreen 6 + historyComponents 7。撤去 v2 テスト分は差し引き |
+| `npx tsc --noEmit` | **エラー 0**（strict） |
+| `npm run build:web` | **PASS**（v3 既定アプリ） |
+| Playwright 視覚検証 | **済**（履歴グラフ・指標・データ少時案内・360/390/1280、localStorage seed） |
+
+### V3-S8.2 やったこと（F-09 グラフ部）
+
+- **v3 履歴画面を新設**し、AppRoot の履歴タブ（プレースホルダ）を `HistoryScreen`（v3）へ差し替え。
+- 表示：日次到達レベル折れ線（同日 max ＝ `DailyStats.highestLevelReached`）/ 最高到達レベル基準線（橙破線 + 「最高 {n}」）/ 最高到達レベル StatTile（青強調）/ 連続日数（🔥 + `Streak.currentStreak`）/ 累計プレイ回数（`PlayStats.totalGames`）。
+- 当日点を ◆ + 赤で強調（色 + 形で非依存、NF-12）。Y 軸は **動的スケール**（到達レベル 1〜720 対応）。軸ラベル 18pt 以上（`font.label`）。点滅なし。
+- データ 7 日未満は EmptyState「もう少しデータが集まると傾向が見えます」。
+- **バッジ部は S9**：本 S8 では「バッジ」見出し + プレースホルダ案内（🏅）のみ。
+
+### V3-S8.3 追加 / 変更 / 削除ファイル
+
+| 区分 | パス | 内容 |
+|---|---|---|
+| 追加 | `src/lib/v3/historyView.ts` | DailyStats → 折れ線系列（日付昇順・直近 30 日窓・当日フラグ・7 日未満案内・aria 要約）。純関数 |
+| 追加 | `src/lib/v3/chartGeometry.ts` | View ベース折れ線座標 + **動的 Y スケール**（`computeYMax`）+ 最高到達レベル基準線 y。純関数 |
+| 追加 | `src/components/v3/LevelLineChart.tsx`（CH-1） | 到達レベル折れ線 + 橙破線基準線 + 当日 ◆ + aria 要約 |
+| 追加 | `src/components/v3/StatTile.tsx`（ST-1） | 最高到達レベル（強調）/ 連続日数（🔥）/ 累計回数の数値タイル |
+| 追加 | `src/components/v3/EmptyState.tsx`（EM-1） | データ少時/空/エラー案内 |
+| 追加 | `src/screens/v3/HistoryScreen.tsx` | 永続化読込 → 整形 → 描画。now 注入可・PC 720px 中央・セーフエリア |
+| 変更 | `src/screens/v3/AppRoot.tsx` | 履歴タブを `HistoryScreen`（v3）へ差し替え |
+| 変更 | `src/i18n/ja.ts` | `historyV3.*` キー追加 |
+| 変更 | `src/theme/tokens.ts` | `levelChartV3`（line/lineHighest/pointToday/point）追加 |
+| 変更 | `tests/screens/v3/AppRoot.test.tsx` | 履歴タブ着地アサーションを v3 HistoryScreen に更新 |
+| 追加（テスト） | `tests/lib/v3/historyView.test.ts` / `chartGeometry.test.ts` / `tests/screens/v3/HistoryScreen.test.tsx` / `tests/components/v3/historyComponents.test.tsx` | |
+| **削除（v2 撤去）** | `src/screens/v2/HistoryScreen.tsx`・`src/components/v2/{LineChart,StatTile,EmptyState}.tsx`・`src/lib/v2/{historyView,chartGeometry}.ts` + 各テスト | v3 履歴が代替（スコア折れ線 → 到達レベル） |
+
+### V3-S8.4 履歴タブ到達 / データ seed 手順（評価用）
+
+1. ビルド & serve：`npm run build:web` → `npx serve -s dist -l 5051`。
+2. ブラウザで `http://localhost:5051/`。オンボ → 距離リマインド → ホームでゲームをプレイすると、`gaboreye:v3:dailyStats:*` / `streak` / `playStats` / `levelState.highestLevel` が記録され、**履歴タブ**で反映される。
+3. 手早く確認したい場合は localStorage 直 seed（web の AsyncStorage は `gaboreye:v3:*` 平キー）：
+   - `gaboreye:v3:userProfile` に `{"onboardingCompleted":true, ...}`、`gaboreye:v3:resetNoticeShown` に `true`。
+   - `gaboreye:v3:levelState` `{"currentLevel":26,"consecutiveFailures":0,"highestLevel":25}`。
+   - `gaboreye:v3:streak` `{"currentStreak":5,"longestStreak":7,"lastPlayedDate":"<today>"}`。
+   - `gaboreye:v3:playStats` `{"totalGames":37}`。
+   - `gaboreye:v3:dailyStats:YYYY-MM-DD` を複数日分 `{"date":"...","highestLevelReached":N,"gameCount":1}`（当日含む）。
+   - reload → 「履歴」タブをタップ。
+
+### V3-S8.5 S9 への申し送り
+
+- **バッジ一覧（F-09 バッジ部・§6 3 軸 11 種）は S9 本実装**。本 S8 の `HistoryScreen` 内「バッジ」見出し直下の EmptyState プレースホルダ（testID `history-badges`）を S9 で `BadgeCell`（BG-1）一覧 + 獲得/未獲得 + ヒントに差し替える。`BadgeStatus` 永続化（`loadAllBadgeStatuses`）は S3 で配線済み。`badge.*` i18n キーは ja.ts に既存。
+- **温存した v2**：`components/v2/{BadgeGrid,BadgeCell,BadgeAwardToast}`・`lib/v2/badgeView`・`state/badgeRecorder`（スコア依存バッジ。S9 で v3 バッジへ置換 or 撤去）、`screens/v2/SettingsScreen` 系（設定タブ未実装のため温存）、`components/v2/AdManager*`（native 広告維持）。
+
+---
+
+## V3-S9. v3.0 — S9：バッジ（F-09 バッジ部・§6 3 軸 11 種・§7.8 BadgeStatus）（2026-06-10）
+
+### V3-S9.1 結論
+
+| 項目 | 状態 |
+|---|---|
+| `npm run typecheck` | **PASS（エラー 0）** |
+| `npm test`（Jest） | **56 スイート / 585 件 PASS（赤 0）**。S8 後より純増 |
+| `npm run build:web` | **PASS**（dist 出力、AppEntry ≈ 1.13 MB） |
+| Playwright 視覚検証 | バッジ一覧（獲得/未獲得+ヒント）3 軸を 375 / 1280 で確認（temp-images/s9-*） |
+
+### V3-S9.2 やったこと（§6 / F-09 バッジ部）
+
+- **v3 バッジ定義/判定/表示を新設**（`lib/v3/badgeDefinitions` / `badges` / `badgeView`）。3 軸 11 種：継続 B-01〜05 / 高難度 B-06〜08 / 高レベル B-09〜11。
+- **付与判定をゲーム完了時に配線**：`state/v3/gameRecorder.recordCompletedGame` が stats 更新後に `evaluateBadges` を呼び、新規獲得分のみ `gaboreye:v3:badge:*` へ永続化。`homeFlow.resolveCompletedGame` が `highestLevel`/`ranges`/`order` を伝搬。
+- **履歴タブのバッジプレースホルダ（testID `history-badges`）を `BadgeGrid`（BG-2）に差し替え**。3 軸見出し + 獲得（🏅+獲得日）/未獲得（🔒+ヒント）。
+- **獲得演出**：`HomeResultCard` 上層に `BadgeAwardToast` を新規獲得時のみ 1 度（点滅なし）。音/ハプティクスは S10 へ `onBadgeShown` フック。
+- **旧 v2 バッジ撤去**：`lib/v2/{badges,badgeView,badgeDefinitions}`・`state/badgeRecorder`・`components/v2/{BadgeCell,BadgeGrid,BadgeAwardToast}` + 各テストを削除。`statsRecorder` からバッジ配線を除去。`webAriaComponents` の BadgeCell を v3 版へ。
+
+### V3-S9.3 閾値仮置き（AS-21）
+
+- B-07 遅い域：`rotationSpeed ≤ 3`（9 段の下位 1/3、絶対値固定）。
+- B-08 最難域：個数4 ∧ 4x4 ∧ 振動 ∧ `rotationSpeed ≤ 2.5`（絶対値 AND）。
+- B-09 ≥ 10（絶対値）/ B-10 ≥ ⌈総レベル数×50%⌉ / B-11 ≥ ⌈総レベル数×85%⌉（**割合ベース**、範囲設定で総数が変わっても中盤/終盤を保つ）。
+
+### V3-S9.4 バッジ確認手順（評価用）
+
+1. `npm run build:web` → `npx serve -s dist -l 5051`。
+2. localStorage 直 seed（web の AsyncStorage は `gaboreye:v3:*` 平キー）：
+   - `gaboreye:v3:userProfile` `{"onboardingCompleted":true,...}` / `gaboreye:v3:resetNoticeShown` `true`。
+   - `gaboreye:v3:levelState` `{"currentLevel":12,"consecutiveFailures":0,"highestLevel":12}`。
+   - `gaboreye:v3:streak` `{"currentStreak":4,...}` / `gaboreye:v3:playStats` `{"totalGames":18}`。
+   - `gaboreye:v3:badge:B-01` `{"badgeId":"B-01","earned":true,"earnedAt":"<iso>"}`（B-02/B-06/B-09 も同様）。
+3. reload →「履歴」タブ → 下スクロールでバッジ一覧。獲得＝🏅+獲得日、未獲得＝🔒+ヒント、3 軸見出し。
+4. 実プレイ確認：ホームでゲームをプレイ → 完了でバッジ判定 → 新規獲得時はホーム結果カードにトースト。
+
+### V3-S9.5 S10 への申し送り
+
+- バッジ獲得音/ハプティクスは未結線。S10 で `HomeResultCard` の `onBadgeShown` に `playEvent('badge')` + ハプティクス（heavy+medium、system §10.1）を結線する。
+- 温存 v2：`screens/v2/SettingsScreen` 系（v3 設定タブ F-13 未実装のため温存）、v2 `statsRecorder`/`sessionRecorder`（孤立 dead コード、後続で一括撤去可能）、`components/v2/AdManager*`（native 広告維持）。
+
+---
+
+## V3-S10. v3.0 — S10：音・ハプティクス（F-14・NF-31/32/33・system §10）（2026-06-10）
+
+### V3-S10.1 結論
+
+| 項目 | 状態 |
+|---|---|
+| `npm run typecheck` | **PASS（エラー 0）** |
+| `npm test`（Jest） | **58 スイート / 618 件 PASS（赤 0）**。S9 後（585 件）より +33 件純増 |
+| `npm run build:web` | **PASS**（dist 出力、AppEntry ≈ 1.15 MB） |
+
+### V3-S10.2 やったこと（F-14）
+
+- **v3 発火決定の純関数を新設**（`lib/v3/feedback.ts`、`decideFeedbackV3`）。v2 の `lib/v2/feedback`（round-correct/wrong/session-complete）を v3 イベント（clear/fail/countdown-tick/levelup/badge-earned）へ読み替え。音 OFF・振動 OFF・サイレントの個別判定は v2 と同一規範。
+- **v3 副作用配線フックを新設**（`hooks/v3/useFeedback.ts`）。決定（純関数）と再生（platform/audio・haptics）を橋渡し。初回マウントで audio.prime、設定は emit 時点の最新値を参照。
+- **platform/audio に v3 音種を追加**（`clear`/`fail`/`levelup`）。v2 互換 `correct`/`wrong`/`end` は残置。**新規アセットは追加せず**既存 mp3 を流用（clear=correct.mp3 / fail=wrong.mp3 / levelup=end.mp3）。Web 合成音は clear=上行2音 / fail=低音1音 / levelup=上行3音。
+- **結線**：
+  - `GameScreen`：締め切り（revealed）時に `clear`/`fail` を 1 度 emit。カウントダウン残り 3/2/1 秒で `countdown-tick` を毎秒 1 度ずつ emit（試行中の唯一の例外）。`onFeedback` プロップ経由。
+  - `AppRoot`：`useFeedback` を 1 箇所で保持し emit を配下へ供給。レベルアップ（`levelDelta > 0`）時に `levelup` emit。`HomeResultCard.onBadgeShown` → `badge-earned` emit。`soundEnabled`/`hapticsEnabled` を App.tsx の Settings から受け取り。
+  - `App.tsx`：`AppRoot` に `settings.soundEnabled`/`settings.hapticsEnabled` を伝搬。
+
+### V3-S10.3 発火マトリクス（system §10.1 準拠）
+
+| イベント | 発火点 | 音種(音量) | ハプティクス | 試行中抑制 |
+|---|---|---|---|---|
+| clear | GameScreen reveal | clear(0.6) | light | 締め切り後のみ |
+| fail | GameScreen reveal | fail(0.5) | medium | 締め切り後のみ |
+| countdown-tick | GameScreen 残り3/2/1秒 | tick(0.4/0.5/0.6) | なし | 残り3秒以下の例外として許可 |
+| levelup(+1) | AppRoot delta>0 | levelup(0.65) | medium | — |
+| badge-earned | HomeResultCard onBadgeShown | badge(0.7) | badge(heavy+medium) | — |
+
+- **発火順序（ホーム結果で重なる場合）**：clear（GameScreen 開示時）→ levelup（結果カード表示時）→ badge（トースト表示時）。時間的にずれるため重複しない。
+- **サイレントモード（NF-33）**：`decideFeedbackV3` の silent 引数で音抑止・ハプティクス継続。実機 iOS は audio backend が `playsInSilentMode:false` で OS 側も無音化（二重担保）。フックは決定段階 silent=false 固定で OS に委ねる。
+- **音 OFF / 振動 OFF**：当該チャネルのみ無発火（個別、F-14）。
+- **−1 専用音は付けない**：spec F-14・system §10.2・S5 Evaluator 申し送り・Planner 申し送り2 に従い、レベルダウンには専用音/イベントを設けない（失敗音で足りる）。`FeedbackEventV3` に leveldown 型は存在しない。
+
+### V3-S10.4 追加テスト（+33 件）
+
+- `tests/lib/v3/feedback.test.ts`（新規）：各イベント × 音ON/OFF × 振動ON/OFF × サイレントの決定検証。
+- `tests/hooks/v3/useFeedback.test.tsx`（新規）：フェイクバックエンドで emit ルーティング・prime・設定追従を検証。
+- `tests/screens/v3/GameScreen.test.tsx`（+3）：clear/fail 締め切り emit、試行中は clear/fail 非発火、ティック 3/2/1。
+- `tests/screens/v3/AppRoot.test.tsx`（+5）：clear+levelup、失敗1回目は fail のみ（levelup なし・−1専用音なし）、音OFF/振動OFFの個別抑止、バッジ獲得音。
+- `tests/platform/audio.test.ts`（更新）：SOUND_KINDS を v3+互換 8 種へ。
+
+### V3-S10.5 native 懸念（CLAUDE.md §5/§6）
+
+- audio/haptics の native/web 分岐は既存 platform 層を流用（Web=Web Audio 合成音・haptics no-op、native=expo-audio/expo-haptics）。本 S10 で触れたファイルに `document`/`window`/DOM 直接アクセスの混入なし（`globalThis` 経由のみ）。
+- `expo-audio` の音源は既存 5 mp3 を流用（clear/fail/levelup は require をエイリアス）。新規アセットなしのため app.json 変更不要。
+- 実機未検証項目（ユーザー Android/iOS で確認推奨）：(1) 音再生レイテンシ 100ms 以内（NF-31、初回 prime 後）、(2) サイレントスイッチで音なし・振動あり（iOS、NF-33）、(3) badge ハプティクス heavy→medium 2 連の体感、(4) Android システム音量 0 時の挙動（OS 任せ）。
+
+### V3-S10.6 S11 への申し送り
+
+- 設定タブ F-13（v3）は未実装のため `screens/v2/SettingsScreen` 系を温存。S11 で v3 設定タブを実装する際、音/振動トグルは `Settings.soundEnabled`/`hapticsEnabled`（S3 永続化済み）を `AppRoot` に渡す経路が既に通っている（App.tsx）。
+- 距離リマインドのカウントダウン（DR-1）のティック音は本 S10 では未配線（spec F-14 はゲームのカウントダウンを主対象。距離リマインドの 3/2/1 ティックを足すなら `DistanceReminderScreen` に同様の emit を追加）。
+
+---
+
+## V3-S10.5. v3.0 — S10.5：設定タブ UI（F-13 / screens.md S3-1 / components.md RG-1・OR-1）（2026-06-10）
+
+### V3-S10.5.1 結論
+
+| 項目 | 状態 |
+|---|---|
+| typecheck | **PASS**（エラー 0） |
+| test | **601 / 601 PASS**（55 スイート）。新規 24 件、v2 孤立テスト 5 ファイル撤去 |
+| build:web | **成功**（`expo export --platform web` → dist） |
+| 設定タブ | プレースホルダ → **v3 SettingsScreen** に差し替え（AppRoot） |
+
+### V3-S10.5.2 やったこと（F-13）
+
+- **v3 設定画面** `src/screens/v3/SettingsScreen.tsx` を新設し、`AppRoot` の設定タブを差し替え。
+- **新規コンポーネント**：`RangeSelector`（RG-1、5 変数の振れ幅チップ）/ `VariableOrderList`（OR-1、変化順並べ替え）/ `DisclaimerModal`（免責再閲覧・閲覧のみ）/ `Toast`（クランプ/最低 1 値違反の aria-live 通知）。
+- 範囲・変化順の変更は S3 の `updateLevelSettings` を呼び §4.5 クランプ（現在レベルを新総レベル数にクランプ + 連続失敗 0 リセット）を実行。クランプで現在レベルが動いたら Toast 告知。
+- 継承項目（視聴距離 / ダークモード / 音 / 振動 / 片眼）は即保存（`updateSettings` / `saveUserProfile`）。darkMode・ranges/order は `onSettingsChange` で App→AppRoot へ反映。
+- 総レベル数プレビュー（`settingsTotalLevels`）、バージョン `v3.0.0` + 免責同意日時。
+
+### V3-S10.5.3 v2 撤去（screens/v2 消滅）
+
+撤去（孤立クラスタを依存グラフで確認後）：`screens/v2/SettingsScreen` / `state/settings`（v2）/ `state/statsRecorder` / `state/sessionRecorder` / `lib/v2/statsAggregation`（+各テスト）。`src/screens/v2/` ディレクトリは空になり削除。**v2 の画面は全撤去・主要 v2 ロジック（採点/統計集計/セッション記録）も撤去済み**。残る v2 オーファン（gameMachine/patch/scoring/roundGen/gameView/feedback/rng/dateUtil、state/schema・repository・migration・keys・dataReset、hooks/v2/*、components/v2 の一部）は**live な v3 チェーンが依存中のため S11 で精査・撤去**。`components/v2/{SettingRow,Toggle,SegmentedControl,DisclaimerPanel}` は v3 設定/オンボで流用（残す）。AdManager native は維持。
+
+### V3-S10.5.4 設定タブ到達手順（手動 / Web）
+
+1. `npm run build:web`（または既存 dist）→ `npx serve -s dist -l <port>`。
+2. 初回はオンボーディング（免責同意 → 年齢 → 距離 → はじめる）を完了。
+3. 距離リマインド後ホームに着地 → 下部タブ **「設定」** を押す。
+4. 範囲チップ／変化順の上下ボタン／各トグル／「免責事項を読む」／「全データ削除」を操作。範囲を絞ると上部「現在の設定：{N} レベル」が変化し、現在レベルが上限超なら Toast でクランプ告知。
+
+### V3-S10.5.5 Playwright 視覚検証
+
+`temp-images/s10_5/`（gitignore 下）に 360/375/1280 のスクショと操作スクショ（範囲縮小・最低 1 値違反・変化順移動・免責モーダル・削除確認）。全幅 console error 0。localStorage で range/order/soundEnabled/levelState 永続化、クランプ 700→640 + 連続失敗 0 リセットを確認。
+
+---
+
+## V3-S11. v3.0 — S11：仕上げ（a11y・レスポンシブ・セーフエリア・全体結合・最終掃除）（2026-06-10）
+
+> 非機能要件（§9）を全画面で満たし、NF-8 コントラスト是正・NF-9 Space キー補完・残 v2 オーファン撤去・全体結合テストを実施した v3.0 最終スプリント。これで v3.0 は **S1〜S11 完成**。
+
+### V3-S11.1 結論
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| `npm run typecheck`（tsc strict） | **エラー 0（PASS）** | — |
+| `npm test`（Jest） | **50 スイート / 487 件 全 PASS（赤 0）** | S10.5 時点 55 スイート/601 件 → 残 v2 オーファン 9 スイート（135 件）撤去 + S11 新規 4 スイート（21 件）追加で 50/487 |
+| `npm run build:web`（既定 = v3） | **成功（Exported: dist）** | AppEntry ≈ **1.18 MB**。`npx serve -s dist` で HTTP 200・`<title>GaborEye</title>` 確認 |
+| NF-8 コントラスト実測 | **全ペア 7:1 以上** | 下記 §V3-S11.3 |
+| NF-9 Space キー | **非 button ロール全てに補完** | 下記 §V3-S11.4 |
+| Expo SDK | 54 系維持・native 依存追加なし | AdManager native/web 維持（広告 native 不変） |
+
+### V3-S11.2 やったこと
+
+1. **NF-8 コントラストトークン是正**（`src/theme/tokens.ts`、Designer amendment 確定値）：
+   - light `brandPrimary #4F46E5→#13449D` / `brandPrimaryHover #4338CA→#0F3580` / `streakFlameFg #EA580C→#7A3C00`。
+   - dark を本書確定値へ統一：`brandPrimary #00E5FF→#7FB0FF` / `brandPrimaryHover #00B8CC→#A6CBFF` / `streakFlameFg #FBBF24→#FFB266`（+ semanticWarning/info を本書 dark 値へ）。
+2. **NF-9 Space キー補完**（新規 `src/theme/keyActivation.ts` の `webSpaceActivation`）：RN-Web 0.21 の PressResponder は非 button ロールで Space 起動しない（Enter のみ）ため、`GaborPatchCell`(checkbox) / `BottomTabBar`(tab) / `SegmentedControl`(radio) / `Toggle`(switch) / `RangeSelector`(checkbox) / `SettingRow`(radio 行) に Web 限定で Space 起動を補完（Enter は RN-Web 既定に委譲、二重発火回避・preventDefault でスクロール抑止）。
+3. **NF-14 Skip link 結線**：既存 `SkipLink`(v2) を `AppRoot` 先頭へ結線し、main コンテンツに Web 限定 `nativeID="ge-main-content"` を付与（従来は未結線オーファンだった）。
+4. **残 v2 オーファン撤去**（撤去前に grep で参照ゼロを確認）：`lib/v2/{roundGen,gameMachine,gameView,scoring,feedback,patch}`、`hooks/v2/useFeedback`、`components/v2/{ConfirmDialog,NumberSpinner}`、`state/{schema,repository,migration,keys,dataReset}` を撤去（+ それらの専用テスト 9 スイート）。**v3 が依存中のものは温存**：`lib/v2/{rng,dateUtil}`（v3 が import 中）、`state/store`（v3 migration/repository/dataReset が依存）、`state/adTracker`（AdManager.native 依存）、`components/v2/{SegmentedControl,SettingRow,Toggle,DisclaimerPanel,SkipLink,AdManager*}`、`hooks/v2/useGameTimer`。
+5. **全体結合テスト**（新規 `tests/screens/v3/integration.test.tsx`）：起動→距離→ゲーム(クリア)→結果(+1)→もう一度→ゲーム(失敗±0)→履歴→設定(範囲変更 720→540)→ホームの通し動線を実永続化（homeFlow.resolveCompletedGame）で 1 本検証。
+
+### V3-S11.3 NF-8 実測コントラスト（WCAG 2.1 相対輝度比）
+
+| ペア | 実測 | 判定 |
+|---|---|---|
+| 白文字 on light `#13449D`（プライマリボタン/アクティブタブ） | **8.97:1** | AAA |
+| 白文字 on light `#0F3580`（hover） | 11.41:1 | AAA |
+| light `#7A3C00` on 白背景（ストリーク炎テキスト） | **8.49:1** | AAA |
+| 黒文字 on dark `#7FB0FF`（プライマリボタン dark） | **9.56:1** | AAA |
+| dark `#FFB266` on dark surface `#12131A`（ストリーク） | 10.42:1 | AAA |
+
+（自動検証：`tests/a11y/contrastNF8.test.ts`。WCAG 相対輝度を計算し全ペア ≥7:1 を assert）
+
+### V3-S11.4 NF-9 / a11y 点検
+
+- Space キー補完を `tests/a11y/keyActivation.test.tsx` で検証（Space で起動・Enter は委譲・disabled は無発火・Native は onKeyDown なし）。
+- aria-checked/pressed/selected（NF-15）・focus 3px（focusStyle の `:focus-visible`）・色のみ非依存（NF-12、各コンポーネントのインジケータ/テキスト併記）は既存実装を維持。
+- reduced-motion（NF-13）：装飾アニメ（BadgeAwardToast / ResultOverlayLayer）は `AccessibilityInfo.isReduceMotionEnabled` で抑制。ゲーム刺激の回転は課題上必須のため抑制対象外（仕様通り）。
+- Skip link（NF-14）：`tests/a11y/appRootSkipLink.test.tsx` で Web 描画 / Native 非描画を検証。
+
+### V3-S11.5 セーフエリア（NF-29/30）
+
+- ゲーム刺激提示中（`GameScreen`）は SafeAreaView を使わず `flex:1` のフルスクリーン（NF-29 許容）。
+- それ以外（距離リマインド / ホーム結果 / 履歴 / 設定 / オンボ / タブバー / GameTopBar）は `SafeAreaView` / `useSafeAreaInsets` でセーフエリア準拠（NF-30）。変更なし（既存実装を確認）。
+
+### V3-S11.6 起動・テスト・ビルド（v3.0 完成状態）
+
+```bash
+cd /Users/np_202212_11/projects/gabor3
+npm install                 # 初回のみ
+
+npm run typecheck           # tsc strict（エラー 0）
+npm test                    # Jest（50 スイート / 487 件 全 PASS）
+npm run build:web           # 既定 v3 を Web 静的エクスポート（Exported: dist）
+
+# dev サーバーが EMFILE を出す場合は静的本番ビルドを serve（CLAUDE.md §6 フォールバック）
+npx serve -s dist -l 4599   # http://localhost:4599/ で起動確認（HTTP 200・<title>GaborEye</title>）
+
+# Android（Expo Go）
+npm run start               # QR を Expo Go で読む（SDK 54）
+```
+
+到達手順（Web）：起動 → 初回はオンボ（免責→年齢→距離→概要）→ 距離リマインド → ホームで現在レベル自動開始。1 ゲーム完了 → 結果カード（クリア/失敗・レベル変化・現在レベル・ストリーク）→「もう一度」。下部 3 タブ（ホーム/履歴/設定）。プレイ中の他タブ/× で中断ダイアログ。設定で範囲/変化順/継承項目。キーボード：Tab で Skip link → 各要素、Enter/Space で起動。
+
+### V3-S11.7 native 懸念（最終監査・Android 実機確認前）
+
+- `keyActivation.ts` / SkipLink / AppRoot の `nativeID`：いずれも `Platform.OS === 'web'` ガードで native には `onKeyDown` / `document` / DOM id を一切出さない。
+- `Image transform` メモ化パターンの新規導入なし（描画系は未変更）。
+- AsyncStorage：v3 は `state/store`（AsyncStorage 公式 API）+ `state/v3/*` 経由。撤去したのは未参照の v2 ストレージ層のみで native/web 共通の `state/store` は温存。
+- 広告（AdManager native/web）不変。
+
+### V3-S11.8 テスト件数
+
+- S10.5 後：55 スイート / **601 件**
+- S11 後：**50 スイート / 487 件**（残 v2 オーファン 9 スイート/135 件撤去、S11 新規 4 スイート/21 件追加：contrastNF8 +13・keyActivation +9・appRootSkipLink +2・integration +1、および settingsControls から NumberSpinner 3 件除去）
+
+### V3-S11.9 撤去ファイル一覧
+
+- source（14）：`src/lib/v2/{roundGen,gameMachine,gameView,scoring,feedback,patch}.ts`、`src/hooks/v2/useFeedback.ts`、`src/components/v2/{ConfirmDialog,NumberSpinner}.tsx`、`src/state/{schema,repository,migration,keys,dataReset}.ts`
+- test（9）：`tests/lib/v2/{roundGen,gameMachine,gameView,scoring,feedback,patch}.test.ts`、`tests/state/{migration,repository,dataReset}.test.ts`
 
 ---
 
@@ -3609,3 +4339,165 @@ Native 音は自動テストで配線（`createAudioPlayer` / `seekTo(0)` / `pla
 - Sprint 23 後：129 suites / **1585 tests**（+15 件、新スイート追加なし）
 - typecheck PASS / build:web PASS（bundle サイズは 796 kB で同一）
 
+---
+
+## Sprint v3.1-A — セッション制データ層＋ロジック層（S12/S14/S15/S16 のデータ・ロジック部）
+
+> v3.1（`docs/spec.md`）への増分。スコープは **schema/migration/level/roundGen/gameMachine/
+> セッションループのロジック/記録層**。UI（ゲーム開示描画・設定 UI・セッション要約画面）は次パス v3.1-B。
+
+### 起動・確認コマンド（変更なし）
+
+- `npm run typecheck` / `npm test` / `npm run build:web`（Web 静的本番ビルド）/ `npm start`（Expo Go）。
+- v3 アプリは `App.tsx → AppRoot`。AppRoot のセッションループ全面配線は v3.1-B で行う（本パスは
+  ロジック層のみ）。
+
+### v3.1-A で実装した範囲
+
+1. **レベル値集合の拡張（§4.1）**：`VALUE_SETS` を易→難順で拡張（count[1-6] / seconds[60..10] /
+   gridSize[3-6] / rotationSpeed[7..1]）。`defaultVariableRanges()` は **v3.0 と同一の既定有効集合**
+   （追加値 OFF・720 レベル）を返す。全集合は `fullVariableRanges()`（理論上限 6864）。`GridSize` 型を
+   3|4 → 3|4|5|6 へ拡張。
+2. **個数×サイズのクランプ（§4.7 / NF-28d）**：`clampCountToGrid(count, gridSize)` = `min(count,
+   gridSize²−1)`（下限 1）。`generateRound` が生成時に適用し、静止パッチを必ず 1 つ以上残す。
+   5x5/6x6 × count6 でも破綻しない。
+3. **締切時判定（§4.3 / AS-24）**：`gameReducer` から**全問正解での即時締め切りを廃止**。締切は
+   `TIMEOUT`（時間到達）のみ。`isAllCorrect` は締切時判定の補助として残置。`closedByAllCorrect` は
+   後方互換のため残すが常に false（@deprecated）。`REVEAL_COUNTDOWN_SEC = 3`（締切後 3 秒開示）を追加。
+4. **セッションループ（§4.6）**：`src/lib/v3/sessionMachine.ts`（純ロジック）。`startSession` /
+   `completeRound`（ラウンドごと即昇降＝§4.4 applyResult・累積経過更新・集計）/ `shouldContinue` /
+   `hasCompletedRounds`。**累積経過は各ラウンドの実プレイ秒数のみ算入（3 秒開示は除外）**。最後の
+   ラウンドは制限時間を超えても完走。
+5. **記録粒度＝セッション（§7.4-7.8）**：`GameRecord`→`SessionRecord` に置換。`PlayStats.totalGames`→
+   `totalSessions`（+`totalRounds`）、`DailyStats.gameCount`→`sessionCount`（+`roundCount`）。
+   `src/state/v3/sessionRecorder.ts`（記録＋日次/ストリーク/累計/バッジ）・`sessionFlow.ts`
+   （`resolveCompletedRound` でラウンドごと LevelState 永続、`finalizeSession`/`abortSession` で
+   セッション記録）。
+6. **設定 `sessionMinutes`（§7.2 / AS-23）**：int 1..15・既定 5。`sanitizeSessionMinutes` /
+   `setSessionMinutes`。梯子（総レベル数）には影響しない。
+7. **migration（v3.0→v3.1 非リセット）**：名前空間 `gaboreye:v3:*` 据え置き。`sessionMinutes` 既定 5・
+   `totalGames`→`totalSessions/totalRounds`・`gameCount`→`sessionCount/roundCount` を読み込み時に補完。
+   `schemaVersion` を 3.1.0 へ更新。旧 `game:<uuid>` は無視（破棄せず放置）。v1〜v2 全消去（F-11）は維持。
+
+### v3.1-A 新規ファイル
+
+- `src/lib/v3/sessionMachine.ts`（セッション統括純ロジック）
+- `src/state/v3/sessionRecorder.ts`（SessionRecord 記録＋集計＋バッジ）
+- `src/state/v3/sessionFlow.ts`（ラウンド/セッションの I/O 配線）
+- テスト：`tests/lib/v3/sessionMachine.test.ts`・`tests/state/v3/sessionFlow.test.ts`・
+  `tests/state/v3/sessionRecorder.test.ts`
+
+### v3.1-A 主な更新ファイル
+
+- `src/lib/v3/{level,roundGen,gameMachine,gameView,statsAggregation}.ts`
+- `src/state/v3/{schema,keys,repository,settings,migration,homeFlow,index}.ts`
+  （`homeFlow.ts` は v3.0 互換シム＝1 ゲーム=1 ラウンド=1 セッションとしてセッション層上で動かす。
+  v3.1-B で AppRoot をセッションループへ配線後に撤去予定）
+- `src/screens/v3/{HistoryScreen,SettingsScreen}.tsx`（totalSessions 参照・grid 5x5/6x6 ラベル）
+- `src/i18n/ja.ts`（grid_5/grid_6）
+
+### 削除ファイル
+
+- `src/state/v3/gameRecorder.ts` → `sessionRecorder.ts` に置換
+- `tests/state/v3/gameRecorder.test.ts` → `sessionRecorder.test.ts` に置換
+
+### v3.1-A の申し送り（v3.1-B で配線するもの）
+
+- AppRoot/GameScreen を**セッションループ**へ全面配線（`startSession`→ラウンド反復→
+  `resolveCompletedRound`→締切後 3 秒カウントダウン→次ラウンド or `finalizeSession`）。
+- 締切後の **3 秒開示カウントダウン UI**（F-12 白→黄→赤、`REVEAL_COUNTDOWN_SEC`）。現状の
+  `revealIntervalMs`（1.5 秒）は v3.0 互換で残置。
+- **セッション要約画面**（F-08：ラウンド数/クリア・失敗数/現在レベル/今セッション最高/今日のストリーク）。
+- 設定タブの **sessionMinutes 行**（S13）と **拡張値域チップ**（5x5/6x6 等）の UI。
+- `homeFlow.ts` 互換シムの撤去。
+
+### テスト件数
+
+- v3.1-A 前：50 suites / **491 tests**
+- v3.1-A 後：**52 suites / 537 tests**（+46 件、新スイート 2＝sessionMachine/sessionFlow、
+  gameRecorder→sessionRecorder 置換）
+- `npm run typecheck` PASS / `npm test` 全 PASS（赤 0）/ `npm run build:web` PASS
+
+
+---
+
+## v3.1-B：UI 配線（セッションループ・3 秒開示・セッション要約・設定 UI・5x5/6x6） — v3.1 完成
+
+v3.1-A のセッション制データ／ロジック層を画面に**全面配線**し、v3.1 をリリース可能状態にした。
+
+### 起動・到達手順（v3.1 セッション動線の確認）
+
+```bash
+npm install
+npm run typecheck     # 型検査（緑）
+npm test              # 全テスト（51 suites / 540 tests・赤 0）
+npm run build:web     # Web 本番ビルド（dist/ 出力）
+npm run web           # Web dev（Expo）。初回は免責同意 → 距離 → セッション自動開始
+npm start             # Expo Go（Android/iOS 実機・Expo SDK 54）
+```
+
+短時間でセッション動線を通すには、設定タブ →「プレイ」→「1 回のプレイ時間」を **1 分**にして
+ホームへ戻り「もう一度」。1 分（60 秒）で 2 ラウンド前後を反復し、セッション要約に到達する。
+
+### v3.1 セッション動線（到達経路）
+
+```
+起動 →（初回）オンボ → 距離リマインド（3 秒自動進行）
+  → ホームで現在レベルのセッション自動開始
+  → ラウンド：n×n 格子を「時間」秒注視 → 締切（時間到達）でクリア/失敗判定（全問正解でも即時終了しない）
+  → 締切後：✅/❌ 開示 + 刺激領域直下に総合クリア/失敗 + 3 秒開示カウントダウン（赤・Black 太字・点滅なし）
+  → 0 で自動的に：累積 < sessionMinutes×60 → 更新後レベルで次ラウンド（GB-1 レベルピル変化で観察）
+                  累積 ≥ sessionMinutes×60 → ホームのセッション要約
+  → セッション要約：現在レベル(64px 主役)/今セッション最高/ラウンド数・クリア・失敗/今日のストリーク
+  → 「もう一度」→ 距離リマインド → 新セッション（累計プレイ +1）
+```
+
+- **セッション残り時間**：ゲーム上部バー左に「あと {mm}:{ss}」（控えめ・段階色なし、GB-1）。
+- **中断（F-07）**：プレイ中の ×／他タブで中断ダイアログ。OK で**未完の現ラウンドは破棄**、
+  **完了済みラウンドのレベル変化は永続保持**（巻き戻さない、AS-30）。完了済みラウンドが 1 つ以上あれば
+  `SessionRecord` 記録。要約表示中・距離リマインド中・3 秒開示中は自由遷移。
+- **5x5/6x6 格子**：設定で個数/サイズの追加値（既定 OFF）を ON にすると出現。360px に収まりタップ確保
+  （隙間 5px/4px、パッチ辺 ≈ 61px/51px、✅/❌・選択枠は比例縮小）。
+
+### v3.1-B 新規ファイル
+
+- `src/components/v3/SessionSummaryCard.tsx`（RC-1 → セッション要約、F-08）
+
+### v3.1-B 主な更新ファイル
+
+- `src/screens/v3/AppRoot.tsx`（**セッションループ全面配線**：startSession → ラウンド反復 →
+  resolveCompletedRound → 3 秒開示後に次ラウンド or finalizeSession → セッション要約。中断は
+  abortSession。`onResolveGame` → `onResolveRound`/`onFinalizeSession` へ）
+- `src/screens/v3/GameScreen.tsx`（締切後 **3 秒開示カウントダウン**（CD-1 disclosure）+ セッション
+  残り時間。`revealIntervalMs`(1.5s) 参照を撤去し `REVEAL_COUNTDOWN_SEC`(3s) へ）
+- `src/screens/v3/SettingsScreen.tsx`（**sessionMinutes ステッパー**（SR-1a、「プレイ」グループ・
+  範囲設定の前）。拡張全集合チップは `VALUE_SETS` 由来で既に表示）
+- `src/components/v3/CountdownTimer.tsx`（`disclosure` variant：3 秒固定・全区間 danger・assertive）
+- `src/components/v3/GameTopBar.tsx`（左にセッション残り時間「あと {mm}:{ss}」、`formatSessionRemaining`）
+- `src/components/v3/GaborGrid.tsx`（`computeGap` を 5x5=5px / 6x6=4px に拡張、system §16.6）
+- `src/lib/v3/gameMachine.ts`（`closedByAllCorrect` フィールド撤去＝締切は TIMEOUT 一本）
+- `src/lib/v3/gameView.ts`（`revealIntervalMs`/`REVEAL_INTERVAL_MS`/`ALL_CORRECT_FEEDBACK_MS` 撤去）
+- `src/state/v3/index.ts`（`homeFlow` export 撤去）
+- `App.tsx`（`resolveCompletedGame` → `resolveCompletedRound`/`finalizeSession`/`abortSession`、
+  セッション識別子 ref、`sessionMinutes` を AppRoot へ）
+- `src/i18n/ja.ts`（`sessionV3.*`・`gameV3.session_remaining*`・`gameV3.disclosure_countdown`・
+  `settingsV3.group_play`/`session_minutes*`・`abortV3.message` をセッション制へ）
+
+### 撤去した v3.0 互換シム（S17）
+
+- `src/state/v3/homeFlow.ts`（互換シム）＋ `tests/state/v3/homeFlow.test.ts`
+- `gameMachine.closedByAllCorrect`（常に false の後方互換フィールド）
+- `gameView.revealIntervalMs` / `REVEAL_INTERVAL_MS` / `ALL_CORRECT_FEEDBACK_MS`（1.5 秒開示）
+
+> `HomeResultCard.tsx`（RC-1 v3.0 単発結果カード）は SessionSummaryCard へ置換され**アプリ未使用**だが、
+> 自身のコンポーネントテストとともに残置（回帰 0・無害）。
+
+### テスト件数
+
+- v3.1-A 後：52 suites / **537 tests**
+- v3.1-B 後：**51 suites / 540 tests**（赤 0）
+  - 純増：SessionSummaryCard 3 件・CD-1 disclosure 1 件・GameTopBar セッション残り時間 3 件・
+    GaborGrid 5x5/6x6 隙間/辺長 2 件・GameScreen 3 秒開示 1 件・sessionMinutes ステッパー 3 件・
+    拡張チップ 2 件・AppRoot セッションループ/要約/中断・integration セッション通し 2 件 等。
+  - スイート数は homeFlow.test 撤去（−1）と sessionMachine/sessionFlow 既存分で 51。
+- `npm run typecheck` PASS / `npm test` 全 PASS（赤 0）/ `npm run build:web` PASS

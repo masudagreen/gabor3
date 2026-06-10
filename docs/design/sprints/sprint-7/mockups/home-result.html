@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GaborEye v3.1 — セッション要約（モック・ラウンド数/クリア・失敗/現在レベル/今セッション最高/ストリーク）</title>
+<style>
+  :root{
+    --canvas:#FAFAFA;--surface:#FFFFFF;--fg:#0E0F12;--fg2:#4A4F5A;
+    --primary:#13449D;--on-primary:#fff;
+    --level-fg:#0E3A86;--level-bg:#E3ECFB;
+    --clear-fg:#0A6238;
+    --streak:#7A3C00;
+    --tab-active:#13449D;--tab-inactive:#4A4F5A;
+    --border:#E3E5EA;
+  }
+  @media (prefers-color-scheme: dark){:root{
+    --canvas:#000;--surface:#15171C;--fg:#F5F6F8;--fg2:#9CA3AD;
+    --primary:#7FB0FF;--on-primary:#000;
+    --level-fg:#A6CBFF;--level-bg:#1B2740;--clear-fg:#3FCB7E;--streak:#FFB266;
+    --tab-active:#7FB0FF;--tab-inactive:#9CA3AD;--border:#2B2F39;
+  }}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{background:var(--canvas);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",sans-serif;
+    color:var(--fg);display:flex;justify-content:center;}
+  .device{width:100%;max-width:412px;min-height:100vh;display:flex;flex-direction:column;
+    padding-top:env(safe-area-inset-top,44px);}
+  .content{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;}
+  .title{font-size:30px;font-weight:700;}
+  .cur-label{font-size:24px;font-weight:500;color:var(--fg2);}
+  .cur-level{font-size:64px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--level-fg);line-height:1;
+    background:var(--level-bg);border-radius:16px;padding:8px 28px;}
+  .highest{font-size:24px;font-weight:500;color:var(--fg2);}
+  .highest b{font-size:48px;font-weight:700;color:var(--level-fg);font-variant-numeric:tabular-nums;display:block;line-height:1.1;}
+  /* round-stat tiles (compact, system §16.4) */
+  .stats{display:flex;gap:10px;width:100%;max-width:340px;}
+  .stat{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 6px;}
+  .stat .label{font-size:18px;font-weight:500;color:var(--fg2);}
+  .stat .val{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .stat.clear .val{color:var(--clear-fg);}
+  .streak{font-size:24px;color:var(--streak);font-weight:700;}
+  .replay{min-height:64px;width:100%;max-width:340px;background:var(--primary);color:var(--on-primary);
+    font-size:26px;font-weight:700;border:none;border-radius:12px;cursor:pointer;margin-top:8px;}
+  .replay:focus-visible{outline:3px solid var(--primary);outline-offset:2px;}
+  .tabs{display:flex;background:var(--surface);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,16px);}
+  .tab{flex:1;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    background:none;border:none;color:var(--tab-inactive);font-size:24px;font-weight:500;position:relative;}
+  .tab.active{color:var(--tab-active);font-weight:700;}
+  .tab.active::before{content:"";position:absolute;top:0;left:20%;right:20%;height:3px;background:var(--tab-active);}
+  .tab .ic{font-size:24px;}
+  .hint{position:fixed;top:8px;right:8px;font-size:12px;background:#000a;color:#fff;padding:4px 8px;border-radius:6px;text-align:right;line-height:1.5;z-index:9;}
+</style>
+</head>
+<body>
+<div class="hint">v3.1 セッション要約<br>5ラウンド / クリア3・失敗2<br>開始L21 → 終了L23 / 最高L24</div>
+<div class="device">
+  <div class="content" role="region"
+       aria-label="セッション終了。現在のレベル 23。このセッションの最高 24。ラウンド 5、クリア 3、失敗 2。連続 5 日">
+    <div class="title">セッション終了</div>
+    <div>
+      <div class="cur-label">現在のレベル</div>
+      <div class="cur-level">23</div>
+    </div>
+    <div class="highest">このセッションの最高<b>24</b></div>
+    <div class="stats">
+      <div class="stat"><div class="val">5</div><div class="label">ラウンド</div></div>
+      <div class="stat clear"><div class="val">3</div><div class="label">クリア</div></div>
+      <div class="stat"><div class="val">2</div><div class="label">失敗</div></div>
+    </div>
+    <div class="streak">🔥 連続 5 日</div>
+    <button class="replay" aria-label="もう一度プレイする（新しいセッション）">もう一度</button>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true"><span class="ic">●</span>ホーム</button>
+    <button class="tab" role="tab" aria-selected="false"><span class="ic">▢</span>履歴</button>
+    <button class="tab" role="tab" aria-selected="false"><span class="ic">⚙</span>設定</button>
+  </nav>
+</div>
+</body>
+</html>

@@ -25,10 +25,10 @@ import { render, screen } from '@testing-library/react-native';
 import { ThemeProvider } from '../../src/theme/ThemeProvider';
 import { Toggle } from '../../src/components/v2/Toggle';
 import { SegmentedControl } from '../../src/components/v2/SegmentedControl';
-import { BadgeCell } from '../../src/components/v2/BadgeCell';
-import { GaborPatchCell } from '../../src/components/v2/GaborPatchCell';
-import type { BadgeViewRow } from '../../src/lib/v2/badgeView';
-import type { PatchDef } from '../../src/lib/v2/patch';
+import { BadgeCell } from '../../src/components/v3/BadgeCell';
+import { GaborPatchCell } from '../../src/components/v3/GaborPatchCell';
+import type { BadgeViewRow } from '../../src/lib/v3/badgeView';
+import type { PatchDef } from '../../src/lib/v3/patch';
 
 function asWeb<T>(fn: () => T): T {
   const original = Platform.OS;
@@ -115,13 +115,11 @@ describe('BadgeCell — role=button + aria-expanded（NF-15 / Minor 4）', () =>
 describe('GaborPatchCell — role=checkbox + aria-checked（NF-15 / Minor 3）', () => {
   const patch: PatchDef = {
     index: 5,
-    changeKind: 'both',
+    changeKind: 'rotation',
     initialOrientationDeg: 30,
-    initialCpd: 3,
     rotationSpeed: 6,
     rotationDir: 'cw',
-    sfChangeSpeed: 0.15,
-    sfDir: 'increase',
+    direction: 'one-way',
   };
 
   it('Web では選択中パッチに aria-checked=true を透過する', () => {

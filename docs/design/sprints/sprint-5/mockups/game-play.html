@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GaborEye v3.1 — ゲームプレイ中（モック・セッション制・レベル/個数表示・一方向/振動・セッション残り時間）</title>
+<style>
+  :root{
+    --gabor-bg:#808080;
+    --surface:#15171C;
+    --countdown-warn:#FFD600;
+    --countdown-danger:#FF8A82;
+    --sel:rgba(235,238,242,0.90);
+    --tab-active:#7FB0FF;
+    --tab-inactive:#9CA3AD;
+    --level-fg:#A6CBFF;
+    --level-bg:#1B2740;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    background:var(--gabor-bg);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",sans-serif;
+    color:#fff;display:flex;justify-content:center;
+  }
+  .device{width:100%;max-width:412px;min-height:100vh;position:relative;display:flex;flex-direction:column;}
+  .statusbar{height:44px;background:var(--gabor-bg);}
+  /* Opaque top bar: countdown + X + level number all 7:1 on opaque #15171C */
+  .topbar{
+    height:64px;display:flex;align-items:center;justify-content:space-between;position:relative;
+    background:var(--surface);padding:0 8px;
+  }
+  .x-btn{width:48px;height:48px;display:flex;align-items:center;justify-content:center;
+    font-size:30px;color:#fff;background:none;border:none;border-radius:8px;cursor:pointer;}
+  .x-btn:focus-visible{outline:3px solid var(--tab-active);outline-offset:2px;}
+  .countdown{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;}
+  .countdown.warn{color:var(--countdown-warn);}
+  .countdown.danger{color:var(--countdown-danger);font-weight:900;}
+  /* v3.1: session remaining time (left, subtle, no stage colors) */
+  .session-remaining{font-size:24px;font-weight:500;font-variant-numeric:tabular-nums;color:#9CA3AD;white-space:nowrap;}
+  .topbar-left{display:flex;align-items:center;gap:6px;}
+  /* level pill (right) */
+  .level-pill{display:flex;align-items:center;gap:4px;background:var(--level-bg);color:var(--level-fg);
+    font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;padding:6px 12px;border-radius:8px;min-height:40px;}
+  /* count banner */
+  .count-banner-wrap{display:flex;justify-content:center;padding:12px 0 0;}
+  .count-banner{background:var(--surface);color:#fff;font-size:26px;font-weight:700;
+    padding:8px 22px;border-radius:9999px;}
+  /* grid */
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:16px;}
+  .grid{display:grid;gap:6px;}
+  .cell{position:relative;border-radius:8px;border:2px solid transparent;cursor:pointer;overflow:hidden;background:var(--gabor-bg);}
+  .cell.selected{border-color:var(--sel);}
+  .cell:focus-visible{outline:3px solid var(--tab-active);outline-offset:2px;}
+  .cell canvas{display:block;width:100%;height:100%;}
+  /* bottom tabs */
+  .tabs{display:flex;background:var(--surface);border-top:1px solid #2B2F39;padding-bottom:env(safe-area-inset-bottom,16px);}
+  .tab{flex:1;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    background:none;border:none;color:var(--tab-inactive);font-size:24px;font-weight:500;cursor:pointer;position:relative;}
+  .tab.active{color:var(--tab-active);font-weight:700;}
+  .tab.active::before{content:"";position:absolute;top:0;left:20%;right:20%;height:3px;background:var(--tab-active);}
+  .tab .ic{font-size:24px;}
+  .hint{position:fixed;top:8px;right:8px;font-size:12px;background:#000a;padding:4px 8px;border-radius:6px;text-align:right;line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="hint">v3.1 ゲームプレイ（セッション制）<br>レベル23 / 3個 / 4x4<br>回転=一方向2 + 振動1（計3個）<br>セッション残り あと4:32（控えめ）</div>
+<div class="device" role="application" aria-label="ゲームプレイ画面">
+  <div class="statusbar" aria-hidden="true"></div>
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="x-btn" aria-label="ゲームを中断">✕</button>
+      <span class="session-remaining" id="sess" aria-label="セッション残り 4 分 32 秒" aria-live="off">あと4:32</span>
+    </div>
+    <span class="countdown" id="cd" aria-live="polite">30</span>
+    <span class="level-pill" aria-label="レベル 23">レベル 23</span>
+  </div>
+  <div class="count-banner-wrap">
+    <span class="count-banner" aria-label="3 個の回転を探してください">3 個探せ！</span>
+  </div>
+  <div class="stage">
+    <div class="grid" id="grid" role="group" aria-label="回転しているパッチをすべて選んでください"></div>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="メインナビゲーション">
+    <button class="tab active" role="tab" aria-selected="true"><span class="ic">●</span>ホーム</button>
+    <button class="tab" role="tab" aria-selected="false"><span class="ic">▢</span>履歴</button>
+    <button class="tab" role="tab" aria-selected="false"><span class="ic">⚙</span>設定</button>
+  </nav>
+</div>
+<script>
+const N = 4;                 // gridSize for this level (4x4)
+const COUNT = 3;             // rotating patches for this level
+const SPEED_DEG = 4;         // rotationSpeed deg/sec for this level (example)
+const cellPx = Math.floor((Math.min(412,window.innerWidth) - 32 - (N-1)*6) / N);
+const grid = document.getElementById('grid');
+grid.style.gridTemplateColumns = `repeat(${N}, ${cellPx}px)`;
+
+// pick COUNT rotating cells. v3.0: rotation only (one-direction or oscillation), NO spatial-frequency change.
+const rotatingIdx = [1, 6, 11];   // 3 rotating patches
+const oscillateIdx = new Set([11]); // one of them oscillates (back-and-forth) = harder
+const cells = [];
+for(let i=0;i<N*N;i++){
+  const cell = document.createElement('button');
+  cell.className='cell';
+  cell.style.width=cellPx+'px';cell.style.height=cellPx+'px';
+  cell.setAttribute('role','checkbox');
+  cell.setAttribute('aria-checked','false');
+  cell.setAttribute('aria-label',`パッチ ${Math.floor(i/N)+1}-${i%N+1}`);
+  const cv=document.createElement('canvas');
+  const dpr=window.devicePixelRatio||1;
+  cv.width=cellPx*dpr;cv.height=cellPx*dpr;
+  cell.appendChild(cv);
+  cell.addEventListener('click',()=>{
+    const sel=cell.classList.toggle('selected');
+    cell.setAttribute('aria-checked',sel?'true':'false');
+  });
+  grid.appendChild(cell);
+  const rotates = rotatingIdx.includes(i);
+  cells.push({el:cell,cv,ctx:cv.getContext('2d'),
+    angle:Math.random()*Math.PI,           // initial orientation (static patches keep this fixed)
+    sf:0.13,                                // spatial frequency FIXED (no time change in v3.0)
+    rotates,
+    oscillates: oscillateIdx.has(i),
+    rotDir:Math.random()<0.5?1:-1,
+    baseAngle:0,                            // for oscillation center
+    size:cellPx*dpr});
+}
+// record base angle for oscillating cells
+cells.forEach(c=>{c.baseAngle=c.angle;});
+
+function drawGabor(c){
+  const ctx=c.ctx,s=c.size,img=ctx.createImageData(s,s);
+  const cx=s/2,cy=s/2,sigma=s*0.30; // gaussian window (1.5x clip margin via sigma)
+  const ca=Math.cos(c.angle),sa=Math.sin(c.angle);
+  for(let y=0;y<s;y++){
+    for(let x=0;x<s;x++){
+      const dx=x-cx,dy=y-cy;
+      const xr=dx*ca+dy*sa;
+      const g=Math.exp(-(dx*dx+dy*dy)/(2*sigma*sigma));
+      const wave=Math.sin(xr*c.sf*2*Math.PI);
+      const lum=128+wave*g*127;
+      const idx=(y*s+x)*4;
+      img.data[idx]=img.data[idx+1]=img.data[idx+2]=lum;img.data[idx+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+}
+let last=performance.now();
+const OSC_AMP = 30*Math.PI/180; // oscillation amplitude ±30deg (Designer aim, system §4.1)
+let t=0;
+function frame(now){
+  const dt=(now-last)/1000;last=now; t+=dt;
+  const w = (SPEED_DEG*Math.PI/180); // angular speed magnitude
+  for(const c of cells){
+    if(c.rotates){
+      if(c.oscillates){
+        // oscillation: back-and-forth around baseAngle. Same angular speed magnitude.
+        // angle = base + amp*sin(theta) where d(theta)/dt chosen so |dangle/dt| ~ w
+        c.angle = c.baseAngle + OSC_AMP*Math.sin(t*(w/OSC_AMP));
+      } else {
+        // one-direction continuous rotation
+        c.angle += c.rotDir*w*dt;
+      }
+    }
+    drawGabor(c);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// countdown demo (level seconds = 30) — ROUND time limit (staged colors, F-12)
+let sec=30;const cd=document.getElementById('cd');
+setInterval(()=>{sec=sec>0?sec-1:30;cd.textContent=sec;
+  cd.className='countdown'+(sec<=3?' danger':sec<=5?' warn':'');
+  cd.setAttribute('aria-live',sec<=5?'assertive':'polite');},1000);
+
+// v3.1: SESSION remaining "あと M:SS" — subtle, no staged colors, no blink (system §16.2)
+let sessSec=4*60+32;const sess=document.getElementById('sess');
+setInterval(()=>{
+  if(sessSec>0)sessSec--;
+  const m=Math.floor(sessSec/60),s=sessSec%60;
+  sess.textContent=`あと${m}:${String(s).padStart(2,'0')}`;
+  sess.setAttribute('aria-label',`セッション残り ${m} 分 ${s} 秒`);
+},1000);
+</script>
+</body>
+</html>

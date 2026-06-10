@@ -1,116 +1,79 @@
-# Sprint 4 自己評価 — ゲーム描画・結果開示 UI（F-01 描画 / F-03 / F-12）
+# Sprint 4 セルフレビュー — v3.0 ゲームコア（生成・選択・クリア判定・振動回転）
 
-> v2.0 リブートの S4。旧 v1.x の同名 self-review は git 履歴に保存（本ファイルは v2.0 で上書き）。
+> 対象：spec §8 S4 / F-01（ロジック）・F-03（クリア判定）・§4.3（クリア/失敗）・§4.1（5 変数）。
+> **ロジック層中心**（描画 UI は S5）。`src/lib/v3/` に新設。App.tsx からは未配線（S5 で接続）。
+> v2.0 / v1.x の同名 self-review は git 履歴に保存（本ファイルは v3.0 で上書き）。
 
-## 1. やったこと（成果物）
+## 1. やったこと（追加ファイル）
 
-### ロジック層（純関数・React 非依存）
-- `src/lib/v2/gameView.ts`
-  - `countdownTier(remainingSec)`：白 / ≤5 秒 黄 / ≤3 秒 赤（F-12）。
-  - `countdownAriaLive(remainingSec)`：≥6 秒 polite / ≤5 秒 assertive（CD-1 / §6）。
-  - `classifyMark` / `classifyMarks`：選んだ変化=TP / 選び逃した変化=FN / 誤選択静止=FP /
-    選ばなかった静止=none（F-03 / OV-2）。
-  - `aggregateKind`：TP=変化全数 かつ FP=0 → success、それ以外 danger（OV-3）。
-  - `quantizeCpd(cpd, step=0.25)`：cpd の BMP 再生成スロットリング（描画戦略）。
-
-### UI 層（components.md 準拠）
-- `src/components/v2/CountdownTimer.tsx`（CD-1 / F-12）：数字のみ・3 段階色・太字補強
-  （normal/warn Bold 700、danger Black 900）・点滅なし・tabular-nums・不透明ピル背景。
-- `src/components/v2/GameTopBar.tsx`（GB-1）：左 X（中断 48pt+）・中央カウントダウン。
-  **バー全体を不透明 `countdownV2.bg` にし（A）＋ CountdownTimer も不透明ピル（B）**で
-  7:1 を構造的に担保（system §1.4 改訂、縞混入を排除）。top セーフエリア分オフセット（NF-29）。
-- `src/components/v2/GaborPatchCell.tsx`（GG-2）：既存 `GaborPatch` をラップし、経過秒 t から
-  `patchOrientationAt(t)` / `quantizeCpd(patchCpdAt(t))` を導出して描画。直接タップでトグル、
-  選択中は `selectionV2.subtle` 2px 枠。`role=checkbox` + `aria-checked` +「パッチ 行-列」。
-  内部 GaborPatch 画像は SR から隠す（ラベル二重化・正解漏洩を防止）。
-- `src/components/v2/GaborGrid.tsx`（GG-1）：n×n 配置、辺長 `min(short-32,360)`/PC 480、
-  隙間 n=3:8px・n≥4:6px、`role=group`、開示中 `pointerEvents=none`。レイアウト算出は
-  `computeGridEdge`/`computeGap`/`computePatchSize` で純関数化（テスト可能）。
-- `src/components/v2/ResultMark.tsx`（OV-2）：TP 実線・FN 透過50%・FP ❌、半透明円
-  （直径 = パッチ辺 55%、縞を完全には隠さない）、aria-label。
-- `src/components/v2/AggregateResultBadge.tsx`（OV-3）：刺激領域直下の総合 ✅/❌ 1 個、
-  数値なし、aria-label「正解」/「不正解」。
-- `src/components/v2/ResultOverlayLayer.tsx`（OV-1）：総合バッジ + 200ms フェードイン
-  （reduced-motion 0ms）+ `announceForAccessibility` で「正解/不正解」+TP/FP/FN 要約を
-  1 度読み上げ（NF-10）。数値は視覚表示せず SR の隠しテキストのみ。
-- `src/components/v2/ConfirmButton.tsx`（BN-1）：方式②のみ描画する「確定」lg(64px)。
-
-### 配線
-- `src/hooks/v2/useGameTimer.ts`：playing 中のみ rAF で経過秒を連続更新、残り秒を整数導出、
-  満了で TIMEOUT を 1 度発火。rAF 無し環境は setInterval フォールバック。roundKey 変化で再開。
-- `src/screens/v2/GameScreen.tsx`：`gameMachine` を `useReducer` で駆動し、タイマー・格子・
-  確定ボタン（方式②）・結果開示を配線。開示は方式①② 1.5 秒 / 方式③全問正解 0.6 秒で NEXT。
-  セッション完了を `onSessionComplete` へ委譲（中断は `onAbort`、S5/S6 で接続）。
-
-### トークン / i18n
-- `src/theme/tokens.ts`：`countdownV2` / `resultV2` / `selectionV2`（system §1.4、light/dark）追加。
-- `src/i18n/ja.ts`：`game.*` / `result.*` キー追加。
-
-### テスト（+60 件）
-- `tests/lib/v2/gameView.test.ts`（色段階・aria-live・マーク分類・総合判定・cpd 量子化）
-- `tests/hooks/v2/useGameTimer.test.tsx`（経過/残り・満了 1 度・停止・roundKey 再開）
-- `tests/components/v2/gameComponents.test.tsx`（CD-1 色段階・OV-2/3・BN-1・GG-1 レイアウト・
-  GG-2 トグル/a11y/ラベル非漏洩）
-- `tests/components/v2/ResultOverlayLayer.test.tsx`（総合バッジ・SR 読み上げ・数値非表示）
-- `tests/screens/v2/GameScreen.test.tsx`（共通描画・3 採点方式 UI 挙動・トグル・開示遷移・
-  セッション完了委譲）
-
-## 2. 確認したこと（自己評価チェックリスト）
-- [x] `npx tsc --noEmit` エラー 0
-- [x] `npm test`：**240 件 / 240 PASS**（S3=180 → +60）、24 スイート
-- [x] `npm run build:web` PASS（web bundle 394 kB）
-- [x] 受け入れ基準（F-01 描画 / F-03 / F-12）を各テストで網羅（§5 マッピング）
-- [x] 空状態（未選択で m 秒満了→総合 ❌・TP=0/FP=0 採点）を GameScreen テストで確認
-- [x] 開示状態（格子 pointer-events:none・タップ無効）・遷移（1.5/0.6 秒）を確認
-- [x] デザイン（モックアップ game-play.html / game-result.html）との構造一致を確認
-
-## 3. 描画戦略の選択理由とパフォーマンス所感（S1 申し送りへの回答）
-- **回転（a deg/sec）**：既存 `GaborPatch` は BMP を orientation=0 で 1 度だけ生成し、
-  表示時に内側 View の `transform: rotate` で角度を当てる方式（v1.1.3〜v1.2 で確立済）。
-  本スプリントは経過秒 t から `patchOrientationAt(t)` を毎レンダー渡すだけで、BMP は再生成
-  されず transform のみ更新される。**回転は BMP 再計算ゼロ**で滑らかに連続回転できる。
-- **空間周波数（b hz/sec）**：BMP 再生成が必要。`quantizeCpd(step=0.25)` で cpd を量子化し、
-  `GaborPatch` の `useMemo` キー（cpd）が刻みをまたいだときだけ再生成（**スロットリング**）。
-  b=0.40hz/sec（最速）でも約 0.6 秒に 1 回の再生成で、視認上は滑らかに見える見込み。
-  b=0.15（既定）では約 1.7 秒に 1 回で十分。
-- **Expo Go 互換**：native 依存（Skia 等）は一切追加していない。既存 BMP→`<Image>` 方式 +
-  transform 回転 + cpd スロットリングのみで、SDK 54 / Expo Go ワークフローを維持。
-  NF-1（回転＋周波数アニメ 30fps 最低許容）はこの方式で中位スマホでも達成可能と判断
-  （回転は transform で実質コストゼロ、cpd 再生成のみが負荷だがスロットルで頻度を抑制）。
-  → **native 依存追加によるオーケストレーター報告は不要**と判断。
-
-## 4. 既知の懸念 / 申し送り
-- **視覚回帰（実機/ブラウザのピクセル確認）は未実施**：本スプリント時点で GameScreen は
-  アプリシェル（App.tsx）から到達できない（タブナビ S5・起動フロー S6 で接続予定）。
-  描画の正しさは (a) 既存 `GaborPatch` のクリッピング品質テスト（NF-27/28、既存）、
-  (b) 本スプリントの構造テスト（レイアウト算出・色段階・マーク分類）、(c) Designer モック
-  アップ（game-play.html / game-result.html）との構造一致、で担保。**実描画のスクリーンショット
-  確認は S5/S6 で GameScreen が画面に乗った時点で実施することを推奨**。
-- **cpd 量子化 step=0.25 は体感未調整**：実機で「滑らかさ vs 再生成負荷」を見て微調整余地あり
-  （NF-28b 弁別性に影響しない範囲で）。可動範囲・初期値は schema 既定（n=4/m=20/r=5/a=6/b=0.15）。
-- **jest-expo の rAF シム由来の act(...) 警告**：fake timers + rAF シム（setTimeout 実装）の
-  既知の相互作用でテスト teardown 時に console 警告が出るが、**テストは全件 PASS**。タイマー満了
-  フレームで state 更新を抑止する実装（`useGameTimer` の stop ガード）で余分な setState は排除済み。
-  プロダクト動作・テスト結果には影響しない。
-- **音/ハプティクス（ティック・正解/不正解音）は S9**：本スプリントは無音（試行中フィードバック
-  なしの原則は満たす）。カウントダウンの色赤転換と同期するティック音は S9 で接続。
-- **中断ダイアログ / タブバー**：GameTopBar の X は `onAbort` 委譲のみ（ダイアログ本体は S5）。
-
-## 5. 受け入れ基準 ↔ テスト マッピング
-
-| 受け入れ基準（screens.md S4 / spec F-01・F-03・F-12） | 検証 |
+| ファイル | 役割 |
 |---|---|
-| n×n 格子描画・静止固定・回転/周波数変化が視認 | GameScreen「共通描画」/ GaborGrid 16 セル / patch.ts（S3）+ Cell が t を反映 |
-| 直接タップ選択・控えめ枠・種類選択 UI なし・現在回答テキストなし | GameScreen「トグル」/ GaborPatchCell トグル・選択枠 |
-| 変化種類を漏らさない中立ラベル（NF-10） | gameComponents「変化/静止でラベルが変わらない」 |
-| m 秒カウントダウン 22pt+（30px）・段階色・点滅なし | CountdownTimer 色段階 3 件（normal/warn/danger）・fontSize.h2 |
-| カウントダウン不透明背景 7:1（system §1.4） | CountdownTimer「背景は不透明 countdown.bg」 |
-| 採点後遷移せず ✅/❌ 重畳・TP/FN 区別・総合 1 個・数値なし | GaborGrid marks / ResultMark TP/FN/FP / AggregateResultBadge / OverlayLayer 数値非表示 |
-| アイコンは縞を完全に覆わない（半透明円・55%） | ResultMark「円径はパッチ辺の約 55%」 |
-| SR で正解/不正解読み上げ・開示中タップ無効 | ResultOverlayLayer SR / GaborGrid revealed pointer-events:none |
-| 方式①：確定なし・m 秒自動採点 | GameScreen 方式① 2 件 |
-| 方式②：確定ボタンあり・押すと即採点 | GameScreen 方式② |
-| 方式③：全問正解で即遷移・0.6 秒短フィードバック | GameScreen 方式③ 2 件 |
-| 方式①②：1.5 秒インターバルで次へ | GameScreen「開示 1.5 秒後に次ラウンド」 |
-| クリッピング品質（NF-27/28・四隅露出なし） | 既存 GaborPatch クリッピングテスト（CLIP_RATIO 1.5・矩形クリップ） |
-| セッションスコア集計委譲（F-04） | GameScreen「全ラウンド完了で onSessionComplete」 |
+| `src/lib/v3/patch.ts`（新規） | v3 パッチモデル。回転のみ（cpd 時間変化は廃止）。`patchOrientationAt`（一方向=単調 / 振動=三角波）・`oscillationOffsetDeg`（往復関数）・`normalizeDeg180`・`isChanging`。`OSCILLATION_AMPLITUDE_DEG=30`（体感調整定数） |
+| `src/lib/v3/roundGen.ts`（新規） | v3 ラウンド生成。**個数はレベルで確定**（ランダム抽選を廃止）。`generateRound`/`generateRoundFromLevel`/`levelParamsToRoundGen`/`generateSpacedAngles`。回転パッチは全て同じ speed/direction、一方向時 CW/CCW はパッチ独立。静止は離散初期角度で固定 |
+| `src/lib/v3/gameMachine.ts`（新規） | v3 ゲーム機械。1 ゲーム=1 ラウンド=1 レベル挑戦。`initGame`/`gameReducer`（TOGGLE/TIMEOUT のみ）・`isAllCorrect`・`deriveReveal`（✅/❌ 分類）。結果は clear/fail の 2 値 |
+| `tests/lib/v3/patch.test.ts`（新規） | 振動往復性・振幅・周期・折り返し瞬間停止・角速度保存・一方向/振動/静止の弁別・正規化 |
+| `tests/lib/v3/roundGen.test.ts`（新規） | 個数固定・n×n セル数・速度/方向の共通性・静止分散・rng 決定論・levelParams 連携 |
+| `tests/lib/v3/gameMachine.test.ts`（新規） | 即時締め切り clear・TIMEOUT fail・revealed 入力無効・終端性・deriveReveal 分類 |
+
+依存：v2 の `rng.ts`（`mulberry32`/`sampleWithoutReplacement`/`randFloat`）を再利用（汎用 PRNG でスコア依存なし）。S2 の `level.ts`（`levelToParams`/`LevelParams`/`Direction`/`GameResult`）を入力にする。
+
+## 2. 振動（往復回転）の実装根拠（NF-28c / system §4.1 / AS-11）
+
+- **三角波**を採用：位相 `sign×speed×t` を周期 `4A`（A=振幅）の三角波に写像。1 往復周期 = `4A/speed` 秒。
+- **振幅 A=30°**：system §4.1 の狙い値 ±20°〜±40° の中央。折り返しが明確に観察でき（一方向との弁別）、180° 周期の一巡を跨がない。定数化し体感調整余地を残した（コメントに根拠記載）。
+- **狙い 1（一方向との弁別）**：振動は 1 周期で初期角度に戻る／一方向は単調に離れ続ける。テストで往復性・周期復帰を担保。
+- **狙い 2（静止との弁別）**：折り返し点で瞬間角速度 0（「一瞬止まって見える」＝振動が難しい根拠）をテストで確認。
+- **狙い 3（角速度保存）**：折り返し点以外では瞬間角速度の大きさ ≈ speed（数値微分でテスト）。「方向だけが独立した難易度軸」となる。
+- **静止弁別（NF-28b）**：静止パッチは離散初期角度で固定（slot=180/セル数 等分）、少数なら 12° 以上を満たす。遅い速度（2deg/sec）でも t に応じて角度が動くことをテストで確認。
+
+## 3. 受け入れ基準マッピング
+
+### F-01（コア・ロジック）
+- [x] レベルの 5 変数から n×n 格子 → `generateRoundFromLevel`（gridSize で 9/16 セル）
+- [x] レベルの個数ぶん回転・残り静止 → `generateRound`（count 個ちょうど、テスト済み）
+- [x] 回転は speed・direction（一方向/振動）で行う → patch.direction/rotationSpeed、`patchOrientationAt`
+- [x] 静止はランダム初期角度で固定（時間変化なし）→ changeKind=null、`patchOrientationAt` が t 非依存
+- [x] タップ選択トグル → `gameReducer` TOGGLE
+- [x] 振動は CW↔CCW の往復として観察できる → `oscillationOffsetDeg` 三角波（テスト済み）
+- [x] 1 ゲーム = 1 レベル挑戦（複数ラウンドなし）→ revealed が終端、NEXT/advance なし
+
+### F-03 / §4.3（クリア/失敗判定）
+- [x] クリア = 回転を過不足なく全選択（FP0 ∧ FN0）→ `isAllCorrect`
+- [x] 全問正解で即時締め切り → TOGGLE 内で `isAllCorrect` 成立時に close（closedByAllCorrect=true）
+- [x] 時間切れ締め切り → TIMEOUT で正誤判定し clear/fail
+- [x] 失敗 = 誤選択 or 選び逃し or 時間切れ → テストで 3 経路確認
+- [x] 開示用に各パッチの正誤導出（correct/missed/wrong/none）→ `deriveReveal`（S5 の ✅/❌ 用）
+- [x] 結果開示中はタップ無効 → revealed 中の TOGGLE/TIMEOUT は no-op
+- [x] 部分点・0〜100 スコアなし → result: 'clear'|'fail' のみ
+
+### レベル増減の配線（設計判断）
+- `applyResult`（S2）と `recordCompletedGame`（S3）の呼び出しは**機械の外**でオーケストレーションする方針。`gameReducer` は純粋に「ゲーム 1 回の結果（clear/fail）」だけを確定し、レベル増減・永続化・記録は S7 のゲーム終了処理（ホームフロー）が `result` を受けて `applyResult`→`recordCompletedGame` を呼ぶ。理由：reducer に永続化副作用を持ち込まない（テスト純度を保つ）／中断時は呼ばない分岐を上位で扱える（F-07）。
+
+## 4. 確認したこと（自己評価チェックリスト）
+
+- [x] `npm run typecheck`：エラー 0（PASS）
+- [x] `npm test`：**640/641 PASS**（S3=586 → **+55 件**＝v3 新規 3 スイート 55 件）。残り 1 赤は既知 authored-broken（§V3.4 `SessionResultCard.test.tsx`、スコア依存・S4 と無関係・S5 で UI 差し替え時に自然解消）
+- [x] `npm run build:web`：成功（Exported: dist、AppEntry ≈ 1.87 MB・S3 から不変＝v3 ロジックは未配線）
+- [x] 振動/一方向/静止の弁別を角度系列の単体テストで担保（往復性・振幅・周期・折り返し停止・角速度保存）
+- [x] rng 注入で決定論（同シードで同格子）
+- 注：ロジック層スプリントのため dev 起動・手動操作・描画状態確認は S5（描画 UI 実装）で実施。本層は App から未到達。
+
+## 5. 死にコード撤去：未着手（App/UI が壊れるため）— S5 へ申し送り
+
+v3 ゲームコアは揃ったが、**v2 のスコア系ロジック（A/B/D：scoring.ts・gameMachine.ts の採点 3 方式/r ラウンド・roundGen.ts の個数ランダム・patch.ts の cpd）は今回撤去しなかった**。理由：
+
+- 撤去対象の v2 game logic は**今も live な v2 UI チェーンに依存されている**：`App.tsx → AppRoot → GameScreen → {gameMachine, scoring, roundGen, patch, ConfirmButton, GaborGrid, GaborPatchCell, gameView}`。`grep` で確認済み。
+- これらを今消すと `npm run build:web`（および typecheck）が壊れる（task 制約「App/UI が壊れない範囲で撤去」「迷うものは残して申し送り」に従い全件残置）。
+- run.md §V3.5 の削除順指針も「S4 ゲームコア → A/B/D を、該当機能の v3 実装 **↔ 旧コード撤去を同時に**」としており、UI 差し替え（S5）と同時撤去が正しい。
+
+**S5 への撤去申し送り（v3 UI 実装 ↔ 旧撤去をセットで）**：
+- `src/screens/v2/GameScreen.tsx` を v3 ゲーム画面（`src/lib/v3/gameMachine` + `patch` + `roundGen` 消費）に差し替え。
+- 差し替え後に撤去可能：`src/lib/v2/{scoring.ts, gameMachine.ts, roundGen.ts, patch.ts, gameView.ts}`、`src/components/v2/{ConfirmButton.tsx, GaborGrid.tsx, GaborPatchCell.tsx, ResultOverlayLayer.tsx}`、`src/state/{sessionRecorder.ts, statsRecorder.ts}`（v2 採点記録）。
+- 連動テスト撤去（仕様廃止）：`tests/lib/v2/{scoring, gameMachine, roundGen, patch, gameView}.test.ts`・`tests/state/sessionRecorder.test.ts`・`tests/components/v2/{gameComponents, ResultOverlayLayer}.test.tsx`・`tests/screens/v2/GameScreen.test.tsx`・`tests/components/v2/SessionResultCard.test.tsx`（§V3.4 の authored-broken もここで解消）。
+- なお `src/lib/v2/rng.ts` は v3 が再利用中（汎用 PRNG・スコア非依存）のため**撤去しない**。将来 `src/lib/v3/` 配下へ移設するか共有 util 化するかは S5 以降の判断（今は YAGNI で据置）。
+
+## 6. 既知の懸念
+
+- **振幅・周期は仮置き**（A=30°）。実機で「一方向と振動の体感差」「最遅 2deg/sec での静止との弁別」を確認して調整余地（AS-21）。S5 描画後に実機検証推奨。
+- **TIMEOUT 時 clear の経路はテスト未到達**：実プレイでは全問正解は TOGGLE 内で即時締め切りされるため、TIMEOUT が clear を返すのは「初期状態で既に全問正解」という起こり得ないケースのみ。ロジックは正しい（isAllCorrect で判定）が、主経路は即時締め切り。
+- レベル増減・記録の配線は本層に持たせていない（§3 設計判断）。S7 で `result` → `applyResult` → `recordCompletedGame` を結線する。

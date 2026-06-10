@@ -1,53 +1,50 @@
 /**
- * GaborEye v2.0 — エントリ。
+ * App.tsx — GaborEye v3.0 エントリ（S7 で起動フロー本実装）。
  *
  * 起動フロー（F-06 / F-11）：
- *   1. 起動時に F-11 マイグレーション（旧名前空間消去 + v2 初期化）を実行
- *   2. 旧データを消去した初回のみ DataResetNotice（RZ-1）を 1 度だけ表示
- *   3. 設定 / プロフィールを読み込む
- *   4. 初回（onboardingCompleted=false）のみオンボーディング（S6-1）を表示。
- *      完了で UserProfile（onboardingCompleted/disclaimerAgreedAt/ageGroup/
- *      viewingDistanceCm）を保存し、AppRoot へ進む。
- *   5. AppRoot（3 タブ + 距離リマインド → 自動開始 → 結果カード）を表示する。
- *   6. darkMode 設定を ThemeProvider に反映。設定の「免責事項を読む」で再閲覧モーダル（F-10）。
+ *   1. 起動時に v3 F-11 マイグレーション（旧名前空間 v1〜v2 消去 + v3 初期化 L1）を実行。
+ *   2. 旧データを消去した初回のみ DataResetNotice（RZ-1）を 1 度だけ表示（F-11）。
+ *   3. v3 Settings / UserProfile / LevelState を読み込む。
+ *   4. 初回（onboardingCompleted=false）のみオンボーディング（免責同意 → 年齢 → 距離 → 概要、F-06/F-10）。
+ *      完了で UserProfile に保存（onboardingCompleted / disclaimerAgreedAt / ageGroup / viewingDistanceCm）。
+ *   5. v3 AppRoot を表示。ホームは距離リマインド → 現在レベルのセッション自動開始 → ラウンド反復
+ *      → セッション要約 →「もう一度」（F-08）。各ラウンド締切は resolveCompletedRound で
+ *      applyResult + LevelState 永続（§4.4 / F-04）、セッション末は finalizeSession で
+ *      SessionRecord・日次・累計・バッジを記録（§7.4-7.8）。
+ *   6. darkMode 設定を ThemeProvider に反映。
  *
- * 2 回目以降：起動 → AppRoot（距離リマインド → 自動開始）。オンボなし。
+ * 注意：AdManager（広告）は native 実装を維持（AdManager.native/web の分割）。
  */
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
-import { getColors, fontSize, fontWeight, spacing, radius, tapTarget } from './src/theme/tokens';
-import { AppRoot } from './src/screens/v2/AppRoot';
-import { OnboardingScreen } from './src/screens/v2/OnboardingScreen';
-import type { OnboardingResult } from './src/screens/v2/OnboardingScreen';
-import { DataResetNotice } from './src/components/v2/DataResetNotice';
-import { DisclaimerPanel } from './src/components/v2/DisclaimerPanel';
+import { getColors } from './src/theme/tokens';
+import { AppRoot } from './src/screens/v3/AppRoot';
+import {
+  OnboardingScreen,
+  type OnboardingResult,
+} from './src/screens/v3/OnboardingScreen';
+import { DataResetNotice } from './src/components/v3/DataResetNotice';
 import { AdManager } from './src/components/v2/AdManager';
 import {
   runStartupMigration,
   acknowledgeResetNotice,
-} from './src/state/migration';
+} from './src/state/v3/migration';
 import {
   loadSettings,
   loadUserProfile,
+  loadLevelState,
   saveUserProfile,
-} from './src/state/repository';
-import { defaultSettings, defaultUserProfile, SCHEMA_VERSION } from './src/state/schema';
-import type { Settings, DarkMode, UserProfile } from './src/state/schema';
-import { estimateDeviceType } from './src/lib/calibration';
+} from './src/state/v3/repository';
+import { resolveCompletedRound, finalizeSession, abortSession } from './src/state/v3/sessionFlow';
+import type { SessionState } from './src/lib/v3/sessionMachine';
+import { defaultSettings } from './src/state/v3/schema';
+import type { Settings, UserProfile, DarkMode } from './src/state/v3/schema';
+import type { LevelState, GameResult } from './src/lib/v3/level';
 import type { ViewingDistanceCm } from './src/lib/calibration';
-import { Platform } from 'react-native';
-import { t } from './src/i18n';
 
 function StatusBarForMode() {
   const { mode } = useTheme();
@@ -59,26 +56,23 @@ export default function App() {
   const [showResetNotice, setShowResetNotice] = React.useState(false);
   const [darkMode, setDarkMode] = React.useState<DarkMode>('system');
   const [settings, setSettings] = React.useState<Settings>(defaultSettings());
-  const [profile, setProfile] = React.useState<UserProfile>(
-    defaultUserProfile(new Date().toISOString(), estimateDeviceType(Platform.OS)),
-  );
-  const [viewingDistanceCm, setViewingDistanceCm] =
-    React.useState<ViewingDistanceCm>(40);
-  const [disclaimerOpen, setDisclaimerOpen] = React.useState(false);
+  const [profile, setProfile] = React.useState<UserProfile | null>(null);
+  const [levelState, setLevelState] = React.useState<LevelState | null>(null);
 
   React.useEffect(() => {
     let mounted = true;
     (async () => {
       const result = await runStartupMigration();
-      const [loadedSettings, loadedProfile] = await Promise.all([
+      const [loadedSettings, loadedProfile, loadedLevel] = await Promise.all([
         loadSettings(),
         loadUserProfile(),
+        loadLevelState(),
       ]);
       if (!mounted) return;
       setSettings(loadedSettings);
       setDarkMode(loadedSettings.darkMode);
       setProfile(loadedProfile);
-      setViewingDistanceCm(loadedProfile.viewingDistanceCm as ViewingDistanceCm);
+      setLevelState(loadedLevel);
       setShowResetNotice(result.shouldShowNotice);
       setReady(true);
     })();
@@ -87,43 +81,112 @@ export default function App() {
     };
   }, []);
 
-  const handleSettingsChange = React.useCallback((next: Settings) => {
-    setSettings(next);
-    setDarkMode(next.darkMode);
-  }, []);
-
   const handleAcknowledge = React.useCallback(async () => {
     await acknowledgeResetNotice();
     setShowResetNotice(false);
   }, []);
 
-  // オンボーディング完了：UserProfile を保存して AppRoot へ（F-06/F-10）。
+  // オンボーディング完了 → UserProfile に保存し、AppRoot へ（F-06/F-10）。
   const handleOnboardingComplete = React.useCallback(
-    async (res: OnboardingResult) => {
-      const next: UserProfile = {
-        ...profile,
-        onboardingCompleted: true,
-        disclaimerAgreedAt: res.disclaimerAgreedAt,
-        ageGroup: res.ageGroup,
-        viewingDistanceCm: res.viewingDistanceCm,
-        schemaVersion: SCHEMA_VERSION,
-      };
-      await saveUserProfile(next);
-      setProfile(next);
-      setViewingDistanceCm(res.viewingDistanceCm);
+    async (onboarding: OnboardingResult) => {
+      setProfile((prev) => {
+        const base = prev as UserProfile;
+        const next: UserProfile = {
+          ...base,
+          onboardingCompleted: true,
+          disclaimerAgreedAt: onboarding.disclaimerAgreedAt,
+          ageGroup: onboarding.ageGroup,
+          viewingDistanceCm: onboarding.viewingDistanceCm,
+        };
+        void saveUserProfile(next);
+        return next;
+      });
     },
-    [profile],
+    [],
   );
 
-  // リセット通知の表示中はオンボより通知を優先する（F-11 → F-06 の順）。
-  const showOnboarding =
-    ready && !showResetNotice && !profile.onboardingCompleted;
+  // セッション識別子（開始時に確定し、finalize/abort で消費）。ラウンドが 0 件のときに採番。
+  const sessionIdentityRef = React.useRef<{ sessionId: string; startedAt: string } | null>(
+    null,
+  );
+
+  function ensureSessionIdentity(): { sessionId: string; startedAt: string } {
+    if (sessionIdentityRef.current == null) {
+      sessionIdentityRef.current = {
+        sessionId: makeSessionId(),
+        startedAt: new Date().toISOString(),
+      };
+    }
+    return sessionIdentityRef.current;
+  }
+
+  // 1 ラウンド締切の本結線（§4.4 / F-04）：applyResult + LevelState 永続。記録はまだ書かない。
+  const handleResolveRound = React.useCallback(
+    async (args: {
+      session: SessionState;
+      result: GameResult;
+      roundPlaySec: number;
+    }) => {
+      // セッション開始（最初のラウンド完了前）に識別子を採番する。
+      ensureSessionIdentity();
+      const outcome = await resolveCompletedRound({
+        session: args.session,
+        result: args.result,
+        roundPlaySec: args.roundPlaySec,
+        levelConfig: {
+          ranges: settings.variableRanges,
+          order: settings.variableOrder,
+        },
+      });
+      setLevelState(outcome.session.levelState);
+      return {
+        session: outcome.session,
+        shouldContinue: outcome.shouldContinue,
+      };
+    },
+    [settings],
+  );
+
+  // セッション確定記録（§7.4-7.8 / F-08）：SessionRecord・日次・累計・バッジ。
+  const handleFinalizeSession = React.useCallback(
+    async (args: { session: SessionState; abort: boolean }) => {
+      const identity = ensureSessionIdentity();
+      const input = {
+        session: args.session,
+        sessionId: identity.sessionId,
+        startedAt: identity.startedAt,
+        levelConfig: {
+          ranges: settings.variableRanges,
+          order: settings.variableOrder,
+        },
+      };
+      const record = args.abort
+        ? await abortSession(input)
+        : await finalizeSession(input);
+      // 次セッション用に識別子をリセット。
+      sessionIdentityRef.current = null;
+      setLevelState(args.session.levelState);
+      return {
+        streak: record?.streak.currentStreak ?? 0,
+        newlyEarnedBadges: record?.newlyEarnedBadges ?? [],
+      };
+    },
+    [settings],
+  );
+
+  // 設定タブで Settings が変わったとき（F-13）：ダークモード即反映 + 範囲/変化順を AppRoot へ。
+  const handleSettingsChange = React.useCallback((next: Settings) => {
+    setSettings(next);
+    setDarkMode(next.darkMode);
+  }, []);
+
+  const showOnboarding = ready && profile !== null && !profile.onboardingCompleted;
 
   return (
     <SafeAreaProvider>
       <ThemeProvider preference={darkMode}>
         <StatusBarForMode />
-        {!ready ? (
+        {!ready || profile === null || levelState === null ? (
           <View
             style={[
               styles.loading,
@@ -133,14 +196,22 @@ export default function App() {
             <ActivityIndicator size="large" />
           </View>
         ) : showOnboarding ? (
-          <OnboardingScreen onComplete={handleOnboardingComplete} testId="onboarding" />
+          <OnboardingScreen onComplete={handleOnboardingComplete} />
         ) : (
           <AdManager>
             <AppRoot
-              settings={settings}
-              viewingDistanceCm={viewingDistanceCm}
+              viewingDistanceCm={profile.viewingDistanceCm as ViewingDistanceCm}
+              oneEyeGuidance={settings.oneEyeGuidance}
+              sessionMinutes={settings.sessionMinutes}
+              soundEnabled={settings.soundEnabled}
+              hapticsEnabled={settings.hapticsEnabled}
+              ranges={settings.variableRanges}
+              order={settings.variableOrder}
+              initialLevel={levelState}
+              initialHomePhase="distance"
+              onResolveRound={handleResolveRound}
+              onFinalizeSession={handleFinalizeSession}
               onSettingsChange={handleSettingsChange}
-              onReadDisclaimer={() => setDisclaimerOpen(true)}
             />
           </AdManager>
         )}
@@ -148,88 +219,22 @@ export default function App() {
           visible={ready && showResetNotice}
           onAcknowledge={handleAcknowledge}
         />
-        <DisclaimerReviewModal
-          visible={disclaimerOpen}
-          onClose={() => setDisclaimerOpen(false)}
-        />
       </ThemeProvider>
     </SafeAreaProvider>
   );
 }
 
-/** 設定からの免責再閲覧モーダル（F-10）。 */
-const DisclaimerReviewModal: React.FC<{
-  visible: boolean;
-  onClose: () => void;
-}> = ({ visible, onClose }) => {
-  const { colors } = useTheme();
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalBackdrop}>
-        <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
-          <View
-            style={[styles.modalCard, { backgroundColor: colors.bgSurface }]}
-          >
-            <Text style={[styles.modalTitle, { color: colors.fgPrimary }]}>
-              {t('disclaimer.title')}
-            </Text>
-            <DisclaimerPanel />
-            <Pressable
-              onPress={onClose}
-              accessibilityRole="button"
-              accessibilityLabel={t('common.close')}
-              style={({ pressed }) => [
-                styles.modalClose,
-                { backgroundColor: colors.actionPrimary },
-                pressed && { opacity: 0.8 },
-              ]}
-            >
-              <Text style={[styles.modalCloseText, { color: colors.fgOnPrimary }]}>
-                {t('common.close')}
-              </Text>
-            </Pressable>
-          </View>
-        </SafeAreaView>
-      </View>
-    </Modal>
-  );
-};
+/** セッション ID（簡易 uuid）。crypto があれば使い、なければ時刻 + 乱数。 */
+function makeSessionId(): string {
+  const g = globalThis as unknown as { crypto?: { randomUUID?: () => string } };
+  if (g.crypto?.randomUUID) return g.crypto.randomUUID();
+  return `session-${Date.now()}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+}
 
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-  },
-  modalSafe: { justifyContent: 'center' },
-  modalCard: {
-    margin: spacing.s5,
-    padding: spacing.s5,
-    borderRadius: radius.lg,
-    gap: spacing.s4,
-  },
-  modalTitle: {
-    fontSize: fontSize.h2,
-    fontWeight: fontWeight.bold,
-  },
-  modalClose: {
-    minHeight: tapTarget.recommended,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCloseText: {
-    fontSize: fontSize.bodyLg,
-    fontWeight: fontWeight.bold,
   },
 });

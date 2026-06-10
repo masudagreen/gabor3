@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GaborEye v3.1 — 結果開示 + 3 秒カウントダウン（モック・クリア/失敗・✅/❌・次ラウンド自動遷移）</title>
+<style>
+  :root{
+    --gabor-bg:#808080;
+    --surface:#15171C;
+    --tab-active:#7FB0FF;
+    --tab-inactive:#9CA3AD;
+    --level-fg:#A6CBFF;
+    --level-bg:#1B2740;
+    --check-correct:#3FCB7E;
+    --cross-wrong:#FF6E73;
+    --agg-clear-bg:#3FCB7E;
+    --agg-fail-bg:#FF6E73;
+    --overlay-bg:rgba(20,24,32,0.82);
+    --countdown-danger:#FF8A82;
+    --fg2:#9CA3AD;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{background:var(--gabor-bg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",sans-serif;
+    color:#fff;display:flex;justify-content:center;}
+  .device{width:100%;max-width:412px;min-height:100vh;position:relative;display:flex;flex-direction:column;}
+  .statusbar{height:44px;background:var(--gabor-bg);}
+  .topbar{height:64px;display:flex;align-items:center;justify-content:space-between;background:var(--surface);padding:0 8px;}
+  .x-btn{width:48px;height:48px;font-size:30px;color:#fff;background:none;border:none;border-radius:8px;}
+  .countdown{font-size:30px;font-weight:700;color:#fff;}
+  .level-pill{background:var(--level-bg);color:var(--level-fg);font-size:24px;font-weight:700;padding:6px 12px;border-radius:8px;}
+  .count-banner-wrap{display:flex;justify-content:center;padding:12px 0 0;}
+  .count-banner{background:var(--surface);color:#fff;font-size:26px;font-weight:700;padding:8px 22px;border-radius:9999px;}
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:16px;}
+  .grid{display:grid;gap:6px;pointer-events:none;}
+  .cell{position:relative;border-radius:8px;border:2px solid transparent;overflow:hidden;background:var(--gabor-bg);}
+  .cell.selected{border-color:rgba(235,238,242,0.90);}
+  .cell canvas{display:block;width:100%;height:100%;}
+  /* result mark overlay */
+  .mark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:55%;height:55%;border-radius:50%;background:var(--overlay-bg);
+    display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900;}
+  .mark.correct{color:var(--check-correct);}        /* rotating, selected */
+  .mark.missed{color:var(--check-correct);opacity:.5;} /* rotating, NOT selected (missed) */
+  .mark.wrong{color:var(--cross-wrong);}            /* static, wrongly selected */
+  /* aggregate badge + 3s disclosure countdown (v3.1) */
+  .agg-row{display:flex;align-items:center;gap:14px;}
+  .agg{display:inline-flex;align-items:center;gap:8px;min-height:56px;padding:0 28px;border-radius:9999px;
+    font-size:26px;font-weight:700;}
+  .agg.clear{background:var(--agg-clear-bg);color:#000;}
+  .agg.fail{background:var(--agg-fail-bg);color:#000;}
+  /* 3s disclosure countdown: opaque plate, danger red + Black, no blink (system §16.1) */
+  .disc-cd{min-width:56px;min-height:56px;display:flex;align-items:center;justify-content:center;
+    background:var(--surface);border-radius:12px;
+    font-size:30px;font-weight:900;font-variant-numeric:tabular-nums;color:var(--countdown-danger);}
+  .tabs{display:flex;background:var(--surface);border-top:1px solid #2B2F39;padding-bottom:env(safe-area-inset-bottom,16px);}
+  .tab{flex:1;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    background:none;border:none;color:var(--tab-inactive);font-size:24px;font-weight:500;position:relative;}
+  .tab.active{color:var(--tab-active);font-weight:700;}
+  .tab.active::before{content:"";position:absolute;top:0;left:20%;right:20%;height:3px;background:var(--tab-active);}
+  .tab .ic{font-size:24px;}
+  .hint{position:fixed;top:8px;right:8px;font-size:12px;background:#000a;padding:4px 8px;border-radius:6px;text-align:right;line-height:1.5;}
+  .toggle{position:fixed;top:8px;left:8px;font-size:13px;background:#000a;color:#fff;border:1px solid #555;padding:6px 10px;border-radius:8px;cursor:pointer;}
+</style>
+</head>
+<body>
+<button class="toggle" id="toggle">クリア/失敗 切替</button>
+<div class="hint">v3.1 結果開示 + 3秒CD<br>✅実線=回転・正選択<br>✅薄=回転・選び逃し<br>❌=静止・誤選択<br>3秒後→次ラウンド自動</div>
+<div class="device" role="application" aria-label="結果開示画面">
+  <div class="statusbar" aria-hidden="true"></div>
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button class="x-btn" aria-label="ゲームを中断">✕</button>
+      <span style="font-size:24px;font-weight:500;color:var(--fg2);font-variant-numeric:tabular-nums;"
+            aria-label="セッション残り 4 分 2 秒" aria-live="off">あと4:02</span>
+    </div>
+    <span class="countdown">0</span>
+    <span class="level-pill" aria-label="レベル 23">レベル 23</span>
+  </div>
+  <div class="count-banner-wrap"><span class="count-banner">3 個探せ！</span></div>
+  <div class="stage">
+    <div class="grid" id="grid" role="group" aria-label="結果"></div>
+    <div class="agg-row">
+      <span class="agg" id="agg" aria-live="assertive"></span>
+      <span class="disc-cd" id="discCd" aria-live="assertive" aria-label="3 秒後に次のラウンドへ進みます">3</span>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true"><span class="ic">●</span>ホーム</button>
+    <button class="tab" role="tab" aria-selected="false"><span class="ic">▢</span>履歴</button>
+    <button class="tab" role="tab" aria-selected="false"><span class="ic">⚙</span>設定</button>
+  </nav>
+</div>
+<script>
+const N=4;
+const cellPx=Math.floor((Math.min(412,window.innerWidth)-32-(N-1)*6)/N);
+const grid=document.getElementById('grid');
+grid.style.gridTemplateColumns=`repeat(${N}, ${cellPx}px)`;
+// rotating patches: indices 1,6,11. In FAIL scenario: user selected 1 (correct), missed 6, wrongly selected 4 (static).
+const rotating=[1,6,11];
+let mode='fail';
+const scenarios={
+  fail:{ selected:new Set([1,4,11]) },  // 1,11 correct; 6 missed; 4 wrong
+  clear:{ selected:new Set([1,6,11]) }  // all rotating selected, none wrong
+};
+const cells=[];
+for(let i=0;i<N*N;i++){
+  const cell=document.createElement('div');
+  cell.className='cell';
+  cell.style.width=cellPx+'px';cell.style.height=cellPx+'px';
+  const cv=document.createElement('canvas');const dpr=window.devicePixelRatio||1;
+  cv.width=cellPx*dpr;cv.height=cellPx*dpr;cell.appendChild(cv);
+  grid.appendChild(cell);
+  cells.push({el:cell,cv,ctx:cv.getContext('2d'),angle:Math.random()*Math.PI,sf:0.13,size:cellPx*dpr});
+}
+function drawGabor(c){
+  const ctx=c.ctx,s=c.size,img=ctx.createImageData(s,s);
+  const cx=s/2,cy=s/2,sigma=s*0.30;const ca=Math.cos(c.angle),sa=Math.sin(c.angle);
+  for(let y=0;y<s;y++)for(let x=0;x<s;x++){
+    const dx=x-cx,dy=y-cy;const xr=dx*ca+dy*sa;
+    const g=Math.exp(-(dx*dx+dy*dy)/(2*sigma*sigma));const wave=Math.sin(xr*c.sf*2*Math.PI);
+    const lum=128+wave*g*127;const idx=(y*s+x)*4;
+    img.data[idx]=img.data[idx+1]=img.data[idx+2]=lum;img.data[idx+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+}
+cells.forEach(drawGabor);
+function render(){
+  const sel=scenarios[mode].selected;
+  cells.forEach((c,i)=>{
+    c.el.classList.toggle('selected',sel.has(i));
+    const old=c.el.querySelector('.mark'); if(old)old.remove();
+    const isRot=rotating.includes(i);const isSel=sel.has(i);
+    let cls=null,sym=null,label=null;
+    if(isRot&&isSel){cls='correct';sym='✓';label='回転（選択済み）';}
+    else if(isRot&&!isSel){cls='missed';sym='✓';label='回転（選び逃し）';}
+    else if(!isRot&&isSel){cls='wrong';sym='✕';label='誤選択';}
+    if(cls){const m=document.createElement('div');m.className='mark '+cls;m.textContent=sym;
+      m.setAttribute('aria-label',label);c.el.appendChild(m);}
+  });
+  const agg=document.getElementById('agg');
+  if(mode==='clear'){agg.className='agg clear';agg.textContent='✓ クリア';agg.setAttribute('aria-label','クリア');}
+  else{agg.className='agg fail';agg.textContent='✕ 失敗';agg.setAttribute('aria-label','失敗');}
+}
+render();
+document.getElementById('toggle').addEventListener('click',()=>{mode=mode==='fail'?'clear':'fail';render();});
+
+// v3.1: 3s disclosure countdown (fixed 3s, danger red + Black, no blink). 0 -> next round (demo loops).
+let disc=3;const discCd=document.getElementById('discCd');
+setInterval(()=>{disc=disc>1?disc-1:3;discCd.textContent=disc;
+  discCd.setAttribute('aria-label',`${disc} 秒後に次のラウンドへ進みます`);},1000);
+</script>
+</body>
+</html>

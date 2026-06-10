@@ -1,14 +1,14 @@
 /**
- * settingsControls.test.tsx — S2 UI コンポーネント（Toggle / SegmentedControl / NumberSpinner）。
+ * settingsControls.test.tsx — 設定 UI コンポーネント（Toggle / SegmentedControl）。
  *
- * a11y ロールと操作（タップで onChange、範囲端でクランプ、テキスト直接入力）を検証する。
+ * a11y ロールと操作（タップで onChange、選択状態、NF-9 Space 起動）を検証する。
+ * （NumberSpinner は v3 で廃止＝S11 で撤去。回転速度等の手動スライダーは spec §11 でスコープ外。）
  */
 
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react-native';
 import { Toggle } from '../../../src/components/v2/Toggle';
 import { SegmentedControl } from '../../../src/components/v2/SegmentedControl';
-import { NumberSpinner } from '../../../src/components/v2/NumberSpinner';
 
 describe('Toggle (FT-1)', () => {
   it('ON/OFF テキストを併記し role=switch・aria-checked を持つ（NF-12）', () => {
@@ -63,95 +63,5 @@ describe('SegmentedControl (FT-3)', () => {
     );
     fireEvent.press(screen.getByLabelText('暗'));
     expect(onChange).toHaveBeenCalledWith('dark');
-  });
-});
-
-describe('NumberSpinner (テキスト入力 + スピンボタン、FT-2 代替)', () => {
-  const baseProps = {
-    label: '回転速度',
-    min: 2,
-    max: 12,
-    step: 0.1,
-    decimals: 1,
-    unit: '°/秒',
-    valueText: (v: number) => `回転速度 ${v.toFixed(1)} 度毎秒`,
-    testId: 'spin',
-  };
-
-  it('aria-value を持ち、現在値をテキスト欄に表示する', () => {
-    render(
-      <NumberSpinner {...baseProps} value={6} onChange={jest.fn()} showDifficultyHint />,
-    );
-    const wrap = screen.getByLabelText('回転速度');
-    expect(wrap.props.accessibilityValue).toEqual({
-      min: 2,
-      max: 12,
-      now: 6,
-      text: '回転速度 6.0 度毎秒',
-    });
-    // テキスト欄に現在値（小数 1 桁）
-    expect(screen.getByTestId('spin-input').props.value).toBe('6.0');
-    // 単位と難→易ヒント
-    expect(screen.getByText('°/秒')).toBeTruthy();
-    expect(screen.getByText('難しい（小）')).toBeTruthy();
-  });
-
-  it('＋ / − ボタンで step（0.1）単位に増減する', () => {
-    const onChange = jest.fn();
-    render(<NumberSpinner {...baseProps} value={6} onChange={onChange} />);
-    fireEvent.press(screen.getByLabelText('回転速度を上げる'));
-    expect(onChange).toHaveBeenCalledWith(6.1);
-    onChange.mockClear();
-    fireEvent.press(screen.getByLabelText('回転速度を下げる'));
-    expect(onChange).toHaveBeenCalledWith(5.9);
-  });
-
-  it('最大値では＋を押しても max を超えない（クランプ）', () => {
-    const onChange = jest.fn();
-    render(<NumberSpinner {...baseProps} value={12} onChange={onChange} />);
-    fireEvent.press(screen.getByLabelText('回転速度を上げる'));
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it('テキスト直接入力 → 確定(blur)で step スナップ + クランプする', () => {
-    const onChange = jest.fn();
-    render(
-      <NumberSpinner
-        {...baseProps}
-        label="周波数変化速度"
-        min={0.05}
-        max={0.4}
-        step={0.005}
-        decimals={3}
-        unit="hz/秒"
-        valueText={(v) => `${v.toFixed(3)} ヘルツ毎秒`}
-        value={0.15}
-        onChange={onChange}
-      />,
-    );
-    const input = screen.getByTestId('spin-input');
-    fireEvent.changeText(input, '0.153'); // 0.005 格子へ → 0.155
-    fireEvent(input, 'blur');
-    expect(onChange).toHaveBeenCalledWith(0.155);
-  });
-
-  it('小数 step（0.005）で誤差なく増減する', () => {
-    const onChange = jest.fn();
-    render(
-      <NumberSpinner
-        {...baseProps}
-        label="周波数変化速度"
-        min={0.05}
-        max={0.4}
-        step={0.005}
-        decimals={3}
-        unit="hz/秒"
-        valueText={(v) => `${v.toFixed(3)} ヘルツ毎秒`}
-        value={0.15}
-        onChange={onChange}
-      />,
-    );
-    fireEvent.press(screen.getByLabelText('周波数変化速度を上げる'));
-    expect(onChange).toHaveBeenCalledWith(0.155);
   });
 });

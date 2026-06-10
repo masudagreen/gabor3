@@ -16,15 +16,32 @@
 
 import { Platform } from 'react-native';
 
-/** 再生可能な効果音の種別（system §10.1）。 */
-export type SoundKind = 'correct' | 'wrong' | 'tick' | 'end' | 'badge';
+/**
+ * 再生可能な効果音の種別（system §10.1）。
+ *
+ * - v3.0（F-14）：`clear` / `fail` / `tick` / `levelup` / `badge`。
+ * - v2.0 互換：`correct` / `wrong` / `end`（旧呼称、当面残置）。
+ *   `clear`/`fail` は v2 の `correct`/`wrong` と同じ素材を流用、`levelup` は `end` 素材を流用。
+ */
+export type SoundKind =
+  | 'clear'
+  | 'fail'
+  | 'tick'
+  | 'levelup'
+  | 'badge'
+  | 'correct'
+  | 'wrong'
+  | 'end';
 
 export const SOUND_KINDS: readonly SoundKind[] = [
+  'clear',
+  'fail',
+  'tick',
+  'levelup',
+  'badge',
   'correct',
   'wrong',
-  'tick',
   'end',
-  'badge',
 ];
 
 export interface AudioBackend {
@@ -43,11 +60,16 @@ export interface AudioBackend {
 
 /** 音種ごとの既定音量（system §10.1）。tick は秒ごとに上書きされる。 */
 export const DEFAULT_VOLUME: Record<SoundKind, number> = {
+  // v3.0（system §10.1）
+  clear: 0.6,
+  fail: 0.5,
+  tick: 0.5,
+  levelup: 0.65,
+  badge: 0.7,
+  // v2.0 互換
   correct: 0.6,
   wrong: 0.6,
-  tick: 0.5,
   end: 0.5,
-  badge: 0.7,
 };
 
 /** 何もしないバックエンド（テスト・SSR・未対応プラットフォーム）。 */
@@ -70,33 +92,39 @@ type ToneSpec = {
   type: OscillatorType;
 };
 
+// 明るい上行 2 音（クリア / v2 correct 共通）
+const TONE_CLEAR: ToneSpec = {
+  type: 'sine',
+  notes: [
+    { freq: 880, at: 0, dur: 0.09 },
+    { freq: 1320, at: 0.1, dur: 0.11 },
+  ],
+};
+// やや低音 1 音（失敗 / v2 wrong 共通。責めない柔らかさ）
+const TONE_FAIL: ToneSpec = {
+  type: 'sine',
+  notes: [{ freq: 220, at: 0, dur: 0.2 }],
+};
+// 達成感のある上行 3 音（レベルアップ / v2 end の上行も近い）
+const TONE_LEVELUP: ToneSpec = {
+  type: 'triangle',
+  notes: [
+    { freq: 587, at: 0, dur: 0.13 },
+    { freq: 784, at: 0.14, dur: 0.13 },
+    { freq: 1175, at: 0.28, dur: 0.2 },
+  ],
+};
+
 const WEB_TONES: Record<SoundKind, ToneSpec> = {
-  // 明るい上行 2 音
-  correct: {
-    type: 'sine',
-    notes: [
-      { freq: 880, at: 0, dur: 0.09 },
-      { freq: 1320, at: 0.1, dur: 0.11 },
-    ],
-  },
-  // やや低音 1 音
-  wrong: {
-    type: 'sine',
-    notes: [{ freq: 220, at: 0, dur: 0.2 }],
-  },
+  // v3.0（system §10.1）
+  clear: TONE_CLEAR,
+  fail: TONE_FAIL,
   // 短い tic
   tick: {
     type: 'square',
     notes: [{ freq: 1500, at: 0, dur: 0.06 }],
   },
-  // 柔らかい完了音（下→上）
-  end: {
-    type: 'sine',
-    notes: [
-      { freq: 523, at: 0, dur: 0.18 },
-      { freq: 784, at: 0.18, dur: 0.22 },
-    ],
-  },
+  levelup: TONE_LEVELUP,
   // 達成感のある上行 3 音
   badge: {
     type: 'triangle',
@@ -106,6 +134,10 @@ const WEB_TONES: Record<SoundKind, ToneSpec> = {
       { freq: 1175, at: 0.36, dur: 0.24 },
     ],
   },
+  // v2.0 互換
+  correct: TONE_CLEAR,
+  wrong: TONE_FAIL,
+  end: TONE_LEVELUP,
 };
 
 /**
@@ -283,15 +315,21 @@ class NativeAudioBackend implements AudioBackend {
  */
 function loadNativeSources(): Partial<Record<SoundKind, number>> {
   const out: Partial<Record<SoundKind, number>> = {};
+  // v3.0 は clear/fail/levelup を新設するが、新規アセットは追加せず既存 mp3 を流用する
+  //（system §10.2：アセット追加は最小限）。clear=correct.mp3 / fail=wrong.mp3 / levelup=end.mp3。
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    out.correct = require('../../assets/audio/correct.mp3');
+    const correct = require('../../assets/audio/correct.mp3');
+    out.correct = correct;
+    out.clear = correct;
   } catch {
     /* missing */
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    out.wrong = require('../../assets/audio/wrong.mp3');
+    const wrong = require('../../assets/audio/wrong.mp3');
+    out.wrong = wrong;
+    out.fail = wrong;
   } catch {
     /* missing */
   }
@@ -303,7 +341,9 @@ function loadNativeSources(): Partial<Record<SoundKind, number>> {
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    out.end = require('../../assets/audio/end.mp3');
+    const end = require('../../assets/audio/end.mp3');
+    out.end = end;
+    out.levelup = end;
   } catch {
     /* missing */
   }

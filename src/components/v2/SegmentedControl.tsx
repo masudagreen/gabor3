@@ -11,6 +11,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useFocusStyle } from '../../theme/focusStyle';
 import { webAria } from '../../theme/ariaWeb';
+import { webSpaceActivation } from '../../theme/keyActivation';
 import { fontSize, fontWeight, radius, tapTarget } from '../../theme/tokens';
 
 export type SegmentOption<T> = {
@@ -51,6 +52,8 @@ export function SegmentedControl<T extends string | number>({
             accessibilityState={{ selected, checked: selected }}
             accessibilityLabel={opt.label}
             {...webAria('radio', { checked: selected, selected }, opt.label)}
+            // NF-9：Space で選択（Enter は RN-Web 既定。radio は Space 未対応のため補完）
+            {...webSpaceActivation(() => onChange(opt.value))}
             style={({ pressed }) => [
               styles.segment,
               i > 0 && { borderLeftWidth: 1, borderLeftColor: colors.borderInput },

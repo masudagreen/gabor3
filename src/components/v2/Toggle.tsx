@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useFocusStyle } from '../../theme/focusStyle';
 import { webAria } from '../../theme/ariaWeb';
+import { webSpaceActivation } from '../../theme/keyActivation';
 import { fontSize, fontWeight, radius, tapTarget } from '../../theme/tokens';
 
 export type ToggleProps = {
@@ -41,6 +42,8 @@ export const Toggle: React.FC<ToggleProps> = ({
       accessibilityState={{ checked: value }}
       accessibilityLabel={`${accessibilityLabel} ${stateText}`}
       {...webAria('switch', { checked: value }, `${accessibilityLabel} ${stateText}`)}
+      // NF-9：Space で切替（Enter は RN-Web 既定。switch は Space 未対応のため補完）
+      {...webSpaceActivation(() => onChange(!value))}
       style={({ pressed }) => [
         styles.row,
         focus,

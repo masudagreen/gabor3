@@ -27,14 +27,16 @@ export const palette = {
     neutral700: '#2F3239',
     neutral800: '#1A1C21',
     neutral900: '#0E0F12',
-    brandPrimary: '#4F46E5', // Vibrant Indigo
-    brandPrimaryHover: '#4338CA',
+    // NF-8 amendment（S11）：白文字 8.97:1 を満たす濃インディゴへ。
+    brandPrimary: '#13449D',
+    brandPrimaryHover: '#0F3580',
     brandAccent: '#E11D48', // Vibrant Rose
     semanticSuccess: '#10B981', // Emerald
     semanticWarning: '#F59E0B', // Amber
     semanticError: '#EF4444', // Red
     semanticInfo: '#3B82F6', // Blue
-    streakFlameFg: '#EA580C', 
+    // NF-8 amendment（S11）：白背景 8.49:1 を満たす濃褐色へ。
+    streakFlameFg: '#7A3C00',
     streakFlameBg: '#FFEDD5',
     disclaimerBg: '#FEF3C7',
     highlightCorrect: '#FBBF24',
@@ -51,14 +53,16 @@ export const palette = {
     neutral700: '#D4D7DC',
     neutral800: '#E8EAEE',
     neutral900: '#F5F6F8',
-    brandPrimary: '#00E5FF', // Neon Cyan
-    brandPrimaryHover: '#00B8CC',
+    // NF-8 amendment（S11）：本書 dark 確定値へ統一（黒文字 on 塗り 9.56:1）。
+    brandPrimary: '#7FB0FF',
+    brandPrimaryHover: '#A6CBFF',
     brandAccent: '#FF007F', // Neon Pink
     semanticSuccess: '#34D399',
-    semanticWarning: '#FBBF24',
+    semanticWarning: '#FFB266',
     semanticError: '#F87171',
-    semanticInfo: '#60A5FA',
-    streakFlameFg: '#FBBF24',
+    semanticInfo: '#7FB0FF',
+    // NF-8 amendment（S11）：本書 dark 確定値へ統一（on surface 10.09:1）。
+    streakFlameFg: '#FFB266',
     streakFlameBg: '#451A03',
     disclaimerBg: '#451A03',
     highlightCorrect: '#FDE047',
@@ -409,6 +413,90 @@ export const selectionV2 = {
     subtle: 'rgba(235,238,242,0.90)',
     idle: 'rgba(235,238,242,0.35)',
   },
+} as const;
+
+// ---------------------------------------------------------------------------
+// 6.7. v3.0 レベル / 結果開示トークン（system.md §1.3・§1.4、S5）
+// ---------------------------------------------------------------------------
+
+/**
+ * v3.0 レベル表示トークン（system.md §1.3 `color.level.*`）。
+ * レベル数値テキスト（ゲーム/ホーム/履歴）+ ピル背景。実測 7:1 以上：
+ *   - light fg #0E3A86 on surface #FFFFFF = 8.62:1
+ *   - dark  fg #A6CBFF on surface #15171C = 9.71:1
+ */
+export const levelV3 = {
+  light: { fg: '#0E3A86', bg: '#E3ECFB' },
+  dark: { fg: '#A6CBFF', bg: '#1B2740' },
+} as const;
+
+/**
+ * v3.0 到達レベル折れ線グラフのトークン（system.md §1.3 `color.level.line.*` /
+ * `color.level.point.today`、CH-1 / F-09）。
+ *   - line       ：日次到達レベル折れ線（青、brand.primary）。
+ *   - lineHighest：最高到達レベルの基準線（橙・破線。system warning 系）。
+ *   - pointToday ：当日到達レベルの強調点（赤。形 ◆ でも区別＝NF-12）。
+ *   - point      ：他日の点（折れ線色と同系）。
+ */
+export const levelChartV3 = {
+  light: {
+    line: '#13449D',
+    lineHighest: '#7A4300',
+    pointToday: '#A11C16',
+    point: '#13449D',
+  },
+  dark: {
+    line: '#7FB0FF',
+    lineHighest: '#FFB266',
+    pointToday: '#FF8A82',
+    point: '#7FB0FF',
+  },
+} as const;
+
+/**
+ * v3.0 結果開示トークン（system.md §1.4、OV-1〜3）。
+ * v2 の TP/FP/FN とは意味が異なる（回転=clear/fail 2 値判定）ため別トークンで定義する：
+ *   - checkCorrect：✅ 実線（回転を正しく選択）。不透明。
+ *   - checkMissed ：✅ 薄め（回転の選び逃し）。透過 50% で「取りこぼし」を区別。
+ *   - crossWrong  ：❌（静止を誤選択）。
+ *   - overlayBg   ：アイコン下の半透明円（縞を完全には隠さない）。
+ *   - aggregateClear / aggregateFail：刺激領域直下の総合クリア/失敗バッジ
+ *     （背景 + 文字 7:1 以上：light clear 白/#0A6238=7.45 / fail 白/#A82018=7.28、
+ *      dark clear 黒/#3FCB7E / fail 黒/#FF6E73）。
+ */
+export const resultV3 = {
+  light: {
+    checkCorrect: '#0A6238',
+    checkMissed: '#0A6238',
+    crossWrong: '#A82018',
+    overlayBg: 'rgba(255,255,255,0.82)',
+    aggregateClearBg: '#0A6238',
+    aggregateFailBg: '#A82018',
+    aggregateClearFg: '#FFFFFF',
+    aggregateFailFg: '#FFFFFF',
+  },
+  dark: {
+    checkCorrect: '#3FCB7E',
+    checkMissed: '#3FCB7E',
+    crossWrong: '#FF6E73',
+    overlayBg: 'rgba(20,24,32,0.82)',
+    aggregateClearBg: '#3FCB7E',
+    aggregateFailBg: '#FF6E73',
+    aggregateClearFg: '#000000',
+    aggregateFailFg: '#000000',
+  },
+} as const;
+
+/**
+ * v3.0 レベル変化告知トークン（system.md §1.4、LD-1）。
+ * 色 + 矢印形 + テキストの 3 重で区別（NF-12）。-1 は「責めない」暗橙（エラー赤を使わない）。
+ *   - up   ：+1（クリアで上昇）緑。light #0A6238 on surface=7.45:1 / dark #3FCB7E。
+ *   - same ：±0（失敗 1 回目/クランプ）中性灰。
+ *   - down ：-1（2 連続失敗）暗橙。light #7A4300 on surface=8.49:1 / dark #FFB266。
+ */
+export const levelDeltaV3 = {
+  light: { upFg: '#0A6238', sameFg: '#4E5460', downFg: '#7A4300' },
+  dark: { upFg: '#3FCB7E', sameFg: '#9CA3AF', downFg: '#FFB266' },
 } as const;
 
 // ---------------------------------------------------------------------------

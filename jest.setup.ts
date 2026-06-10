@@ -19,6 +19,17 @@ jest.mock(
     require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
 
+// react-native-reanimated（v4）は jest-expo（native preset）下で、依存する
+// react-native-worklets の native 初期化に失敗する
+// （"Native part of Worklets doesn't seem to be initialized"）。
+// worklets を公式モックに差し替えると、reanimated の初期化も native を叩かなくなり、
+// SessionResultCard 等を import するスイートが緑になる。
+// （プロダクトコード・テスト内容は変更しない。インフラ層のみの是正）
+jest.mock('react-native-worklets', () =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('react-native-worklets/lib/module/mock'),
+);
+
 // Expo Vector Icons のモック（テスト中の非同期フォントロードによる警告を防止）
 jest.mock('@expo/vector-icons', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports

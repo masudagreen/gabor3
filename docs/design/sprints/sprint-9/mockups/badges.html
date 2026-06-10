@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GaborEye v3.0 — バッジ一覧（モック・3 軸 11 種）</title>
+<style>
+  :root{--canvas:#FAFAFA;--surface:#FFFFFF;--fg:#0E0F12;--fg2:#4A4F5A;--border:#E3E5EA;
+    --locked:#9AA0A8;--tab-active:#13449D;--tab-inactive:#4A4F5A;}
+  @media (prefers-color-scheme: dark){:root{--canvas:#000;--surface:#15171C;--fg:#F5F6F8;--fg2:#9CA3AD;
+    --border:#2B2F39;--locked:#5C6270;--tab-active:#7FB0FF;--tab-inactive:#9CA3AD;}}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{background:var(--canvas);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",sans-serif;
+    color:var(--fg);display:flex;justify-content:center;}
+  .device{width:100%;max-width:412px;min-height:100vh;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,44px);}
+  .content{flex:1;overflow:auto;padding:16px;}
+  h1{font-size:36px;font-weight:700;margin-bottom:8px;}
+  .axis{font-size:24px;font-weight:500;color:var(--fg2);margin:16px 0 10px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .cell{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;}
+  .cell .ic{font-size:40px;}
+  .cell.locked .ic{filter:grayscale(1);opacity:.5;}
+  .cell .name{font-size:24px;font-weight:700;margin-top:6px;}
+  .cell .meta{font-size:24px;color:var(--fg2);margin-top:4px;line-height:1.4;}
+  .cell.locked .name{color:var(--locked);}
+  .tabs{display:flex;background:var(--surface);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,16px);}
+  .tab{flex:1;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    background:none;border:none;color:var(--tab-inactive);font-size:24px;font-weight:500;position:relative;}
+  .tab.active{color:var(--tab-active);font-weight:700;}
+  .tab.active::before{content:"";position:absolute;top:0;left:20%;right:20%;height:3px;background:var(--tab-active);}
+  .tab .ic{font-size:24px;}
+</style>
+</head>
+<body>
+<div class="device">
+  <div class="content">
+    <h1>バッジ</h1>
+    <div class="axis">継続日数</div>
+    <div class="grid">
+      <div class="cell" role="listitem"><div class="ic">🏅</div><div class="name">はじめの一歩</div><div class="meta">2026-06-03</div></div>
+      <div class="cell" role="listitem"><div class="ic">🏅</div><div class="name">三日坊主突破</div><div class="meta">2026-06-05</div></div>
+      <div class="cell locked" role="listitem"><div class="ic">🔒</div><div class="name">一週間の習慣</div><div class="meta">7 日連続でプレイすると獲得</div></div>
+      <div class="cell locked" role="listitem"><div class="ic">🔒</div><div class="name">二週間マスター</div><div class="meta">14 日連続でプレイすると獲得</div></div>
+      <div class="cell locked" role="listitem"><div class="ic">🔒</div><div class="name">一ヶ月の継続</div><div class="meta">30 日連続でプレイすると獲得</div></div>
+    </div>
+    <div class="axis">高難度到達</div>
+    <div class="grid">
+      <div class="cell" role="listitem"><div class="ic">🏅</div><div class="name">振動を見抜く目</div><div class="meta">2026-06-08</div></div>
+      <div class="cell locked" role="listitem"><div class="ic">🔒</div><div class="name">スロー回転ハンター</div><div class="meta">回転がゆっくりなレベルをクリアで獲得</div></div>
+      <div class="cell locked" role="listitem"><div class="ic">🔒</div><div class="name">達人の眼</div><div class="meta">最も難しいレベルをクリアで獲得</div></div>
+    </div>
+    <div class="axis">高レベル到達</div>
+    <div class="grid">
+      <div class="cell" role="listitem"><div class="ic">🏅</div><div class="name">二桁の壁</div><div class="meta">2026-06-07</div></div>
+      <div class="cell locked" role="listitem"><div class="ic">🔒</div><div class="name">熟達者</div><div class="meta">最高到達レベルが中盤に達すると獲得</div></div>
+      <div class="cell locked" role="listitem"><div class="ic">🔒</div><div class="name">頂を目指して</div><div class="meta">最高到達レベルが終盤に達すると獲得</div></div>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="false"><span class="ic">▢</span>ホーム</button>
+    <button class="tab active" role="tab" aria-selected="true"><span class="ic">■</span>履歴</button>
+    <button class="tab" role="tab" aria-selected="false"><span class="ic">⚙</span>設定</button>
+  </nav>
+</div>
+</body>
+</html>
+</content>

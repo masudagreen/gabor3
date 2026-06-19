@@ -31,7 +31,8 @@ describe('buildBadgeRows', () => {
     const b01 = rows.find((r) => r.id === 'B-01')!;
     expect(b01.earned).toBe(false);
     expect(b01.earnedDate).toBeNull();
-    expect(b01.hint).toContain('初めて');
+    // 単位語・文言はロケール追従（テスト環境の既定ロケール=en）。
+    expect(b01.hint).toContain('first');
   });
 
   it('獲得済み行は earnedAt をローカル日付に整形する', () => {
@@ -50,11 +51,11 @@ describe('buildBadgeRows', () => {
     expect(names).not.toContain('パーフェクト');
     expect(names).not.toContain('安定の高得点');
     expect(names).not.toContain('微差を見抜く目');
-    // v3 の高レベル軸の名称が入る。
-    expect(names).toContain('二桁の壁');
-    expect(names).toContain('熟達者');
-    expect(names).toContain('頂を目指して');
-    expect(names).toContain('振動を見抜く目');
+    // v3 の高レベル軸の名称が入る（ロケール追従、テスト環境=en）。
+    expect(names).toContain('Double-Digit Wall');
+    expect(names).toContain('Adept');
+    expect(names).toContain('Toward the Summit');
+    expect(names).toContain('Eye for Oscillation');
   });
 });
 
@@ -78,7 +79,7 @@ describe('earnedCount / resolveBadgeNames', () => {
 
   it('resolveBadgeNames は ID を名称付きに解決する', () => {
     expect(resolveBadgeNames(['B-06'])).toEqual([
-      { id: 'B-06', name: '振動を見抜く目' },
+      { id: 'B-06', name: 'Eye for Oscillation' },
     ]);
   });
 });

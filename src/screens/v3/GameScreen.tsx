@@ -178,14 +178,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       if (result) onResolvedRef.current(result, state);
       return;
     }
-    // 3/2/1 秒で毎秒ティック音（CD-1 disclosure と同期、F-14）。
-    // 開示カウントダウンは 3→1 の範囲なので tick イベントの 1|2|3 に収まる。
-    if (revealCountdown <= 3) {
-      onFeedbackRef.current?.({
-        type: 'countdown-tick',
-        remainingSec: revealCountdown as 1 | 2 | 3,
-      });
-    }
+    // ユーザー要望：次ラウンドへのカウントダウン中は音を出さない（F-14 ティック音を無効化）
+    // if (revealCountdown <= 3) {
+    //   onFeedbackRef.current?.({
+    //     type: 'countdown-tick',
+    //     remainingSec: revealCountdown as 1 | 2 | 3,
+    //   });
+    // }
     const id = setTimeout(() => {
       setRevealCountdown((c) => (c === null ? null : c - 1));
     }, 1000);

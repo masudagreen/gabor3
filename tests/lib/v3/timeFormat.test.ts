@@ -22,25 +22,26 @@ describe('splitDuration', () => {
   });
 });
 
+// 単位語はロケール追従になったため、テスト環境の既定ロケール（en）の出力を検証する。
 describe('formatSessionDuration（セッション時間）', () => {
-  it('1 分未満は「S秒」', () => {
-    expect(formatSessionDuration(40)).toBe('40秒');
-    expect(formatSessionDuration(0)).toBe('0秒');
+  it('1 分未満は秒のみ', () => {
+    expect(formatSessionDuration(40)).toBe('40s');
+    expect(formatSessionDuration(0)).toBe('0s');
   });
-  it('1 分以上は「M分S秒」', () => {
-    expect(formatSessionDuration(272)).toBe('4分32秒');
-    expect(formatSessionDuration(60)).toBe('1分0秒');
+  it('1 分以上は「分秒」', () => {
+    expect(formatSessionDuration(272)).toBe('4m 32s');
+    expect(formatSessionDuration(60)).toBe('1m 0s');
   });
-  it('1 時間以上は「H時間M分」', () => {
-    expect(formatSessionDuration(3720)).toBe('1時間2分');
+  it('1 時間以上は「時分」', () => {
+    expect(formatSessionDuration(3720)).toBe('1h 2m');
   });
 });
 
 describe('formatCumulativeDuration（累計ゲーム時間）', () => {
-  it('1 分未満は「S秒」、1 分以上は「M分」、1 時間以上は「H時間M分」', () => {
-    expect(formatCumulativeDuration(0)).toBe('0秒');
-    expect(formatCumulativeDuration(45)).toBe('45秒');
-    expect(formatCumulativeDuration(272)).toBe('4分');
-    expect(formatCumulativeDuration(7320)).toBe('2時間2分');
+  it('1 分未満は秒・1 分以上は分・1 時間以上は時分', () => {
+    expect(formatCumulativeDuration(0)).toBe('0s');
+    expect(formatCumulativeDuration(45)).toBe('45s');
+    expect(formatCumulativeDuration(272)).toBe('4m');
+    expect(formatCumulativeDuration(7320)).toBe('2h 2m');
   });
 });

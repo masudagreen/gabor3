@@ -19,6 +19,7 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useFocusStyle } from '../../theme/focusStyle';
 import { webAria } from '../../theme/ariaWeb';
 import { fontSize, fontWeight, radius, spacing, tapTarget } from '../../theme/tokens';
+import { t } from '../../i18n';
 
 export type OrderItem<K extends string> = {
   key: K;
@@ -85,14 +86,14 @@ export function VariableOrderList<K extends string>({
             <View style={styles.buttons}>
               <MoveButton
                 icon="chevron-up"
-                label={`${item.label}を 1 つ上へ`}
+                label={t('settingsV3.order_move_up', { name: item.label })}
                 disabled={first}
                 onPress={() => move(index, -1)}
                 testId={testId ? `${testId}-up-${item.key}` : undefined}
               />
               <MoveButton
                 icon="chevron-down"
-                label={`${item.label}を 1 つ下へ`}
+                label={t('settingsV3.order_move_down', { name: item.label })}
                 disabled={last}
                 onPress={() => move(index, 1)}
                 testId={testId ? `${testId}-down-${item.key}` : undefined}

@@ -12,12 +12,22 @@
  */
 
 import type { BadgeStatus, BadgeId } from '../../state/v3/schema';
-import {
-  BADGE_DEFINITIONS,
-  BADGE_DEFINITION_BY_ID,
-  type BadgeAxis,
-} from './badgeDefinitions';
+import { BADGE_DEFINITIONS, type BadgeAxis } from './badgeDefinitions';
 import { localDateString } from '../v2/dateUtil';
+import { t } from '../../i18n';
+
+/** バッジ ID → ローカライズ名称（i18n `badge.defs.<id>.name`）。 */
+export function badgeName(id: BadgeId): string {
+  return t(`badge.defs.${id}.name`);
+}
+/** バッジ ID → ローカライズ獲得条件（i18n `badge.defs.<id>.condition`）。 */
+export function badgeCondition(id: BadgeId): string {
+  return t(`badge.defs.${id}.condition`);
+}
+/** バッジ ID → ローカライズ未獲得ヒント（i18n `badge.defs.<id>.hint`）。 */
+export function badgeHint(id: BadgeId): string {
+  return t(`badge.defs.${id}.hint`);
+}
 
 export type BadgeViewRow = {
   id: BadgeId;
@@ -54,12 +64,12 @@ export function buildBadgeRows(statuses: readonly BadgeStatus[]): BadgeViewRow[]
     return {
       id: def.id,
       axis: def.axis,
-      name: def.name,
+      name: badgeName(def.id),
       earned: st.earned,
       earnedDate:
         st.earned && st.earnedAt ? localDateString(new Date(st.earnedAt)) : null,
-      hint: def.hint,
-      condition: def.condition,
+      hint: badgeHint(def.id),
+      condition: badgeCondition(def.id),
     };
   });
 }
@@ -92,5 +102,5 @@ export function earnedCount(statuses: readonly BadgeStatus[]): number {
 export function resolveBadgeNames(
   ids: readonly BadgeId[],
 ): { id: BadgeId; name: string }[] {
-  return ids.map((id) => ({ id, name: BADGE_DEFINITION_BY_ID[id].name }));
+  return ids.map((id) => ({ id, name: badgeName(id) }));
 }

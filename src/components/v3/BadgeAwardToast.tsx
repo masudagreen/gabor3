@@ -104,7 +104,10 @@ export const BadgeAwardToast: React.FC<BadgeAwardToastProps> = ({
       names.length === 1
         ? t('badge.award_announce', { name: names[0].name })
         : t('badge.award_announce', {
-            name: `${names[0].name} ほか ${names.length - 1} 件`,
+            name: t('badge.award_multi', {
+              name: names[0].name,
+              count: names.length - 1,
+            }),
           });
     AccessibilityInfo.announceForAccessibility(announceText);
 

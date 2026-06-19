@@ -35,7 +35,7 @@ import { ResultMark } from './ResultMark';
 /** ガボールのコントラスト・ガウス窓・基準 cpd（system §7 既定、v3 は cpd 固定）。 */
 const PATCH_CONTRAST = 0.5;
 const PATCH_SIGMA_DEG = 0.6;
-const PATCH_CPD = 3; // system §7.4 基準 3 cpd（@40cm）
+const PATCH_CPD = 1.5; // ユーザー要望により周波数を半分に（元 3 cpd）
 
 export type GaborPatchCellProps = {
   patch: PatchDef;

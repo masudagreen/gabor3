@@ -42,6 +42,7 @@ import {
 } from '../lib/gaborPixels';
 import { DEFAULT_DPI } from '../lib/calibration';
 import { palette } from '../theme/tokens';
+import { t } from '../i18n';
 
 /**
  * クリッピングマージン倍率（NF-27 / NF-28、system.md §1.12.2）。
@@ -92,7 +93,7 @@ const GaborPatchInner: React.FC<GaborPatchProps> = ({
   pixelDensity = 1,
   viewingDistanceCm,
   dpi = DEFAULT_DPI.pc,
-  ariaLabel = '縞模様の刺激',
+  ariaLabel = t('common.patch_stimulus'),
   testId,
   selected,
   highlighted,

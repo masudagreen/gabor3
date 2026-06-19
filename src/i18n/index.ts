@@ -9,9 +9,49 @@
  * v1 では ja のみ。v2 で switchLocale() を導入予定。
  */
 
+import { getLocales } from 'expo-localization';
 import { ja, LocaleDict } from './ja';
+import { en } from './en';
+import { es } from './es';
+import { pt } from './pt';
+import { zh } from './zh';
+import { ru } from './ru';
+import { ko } from './ko';
 
-const dict: LocaleDict = ja;
+const dictionaries: Record<string, any> = {
+  ja,
+  en,
+  es,
+  pt,
+  zh,
+  ru,
+  ko,
+};
+
+let currentLocale = 'en'; // default fallback
+const locales = getLocales();
+if (locales && locales.length > 0) {
+  const code = locales[0].languageCode;
+  if (code && code in dictionaries) {
+    currentLocale = code;
+  }
+}
+
+let dict: any = dictionaries[currentLocale] || en;
+
+/**
+ * 手動で言語を切り替える関数（v2.0 以降用）
+ */
+export function setLocale(locale: keyof typeof dictionaries) {
+  if (locale in dictionaries) {
+    currentLocale = locale;
+    dict = dictionaries[locale];
+  }
+}
+
+export function getLocale() {
+  return currentLocale;
+}
 
 /**
  * 任意のドット区切りキーで dict を辿るユーティリティ（純関数）。

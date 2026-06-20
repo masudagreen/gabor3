@@ -257,7 +257,8 @@ export const ko = {
     disclaimer_body:
       '이 앱은 의료기기가 아닙니다. 눈에 통증이나 불편함을 느끼면 즉시 사용을 중단하세요.',
     distance_preview_label: '이 거리에서 보이는 패치 예시',
-    tutorial_title: '회전하는 패치를 탭하세요',
+    tutorial_title: '게임 방법',
+    tutorial_body: '회전하는 패치를 찾아 탭하세요',
     tutorial_patch_label: '회전하는 패치. 탭하여 시작하세요.',
     step_progress: '{{current}}/{{total}} 단계',
     welcome_title: 'GaborEye에 오신 것을 환영합니다',

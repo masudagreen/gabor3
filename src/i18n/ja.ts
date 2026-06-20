@@ -311,7 +311,8 @@ export const ja = {
     disclaimer_body:
       '本アプリは医療機器ではありません。目に痛みや違和感を感じたら、ただちに使用を中止してください。',
     distance_preview_label: 'この距離で見えるパッチの例',
-    tutorial_title: '回転しているパッチをタップしてください',
+    tutorial_title: '遊び方',
+    tutorial_body: '回転しているパッチを探してタップして下さい',
     tutorial_patch_label: '回転しているパッチ。タップして始めましょう',
     step_progress: 'ステップ {{current}}/{{total}}',
     welcome_title: 'GaborEye へようこそ',

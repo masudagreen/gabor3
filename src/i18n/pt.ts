@@ -257,7 +257,8 @@ export const pt = {
     disclaimer_body:
       'Este aplicativo não é um dispositivo médico. Se sentir dor ou desconforto nos olhos, pare de usá-lo imediatamente.',
     distance_preview_label: 'Exemplo de padrão nesta distância',
-    tutorial_title: 'Toque no padrão que gira',
+    tutorial_title: 'Como jogar',
+    tutorial_body: 'Encontre e toque no padrão que gira',
     tutorial_patch_label: 'Padrão giratório. Toque para começar.',
     step_progress: 'Passo {{current}}/{{total}}',
     welcome_title: 'Bem-vindo ao GaborEye',

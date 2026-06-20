@@ -257,7 +257,8 @@ export const es = {
     disclaimer_body:
       'Esta aplicación no es un dispositivo médico. Si siente dolor o molestias en los ojos, deje de usarla de inmediato.',
     distance_preview_label: 'Ejemplo de patrón a esta distancia',
-    tutorial_title: 'Toca el patrón que gira',
+    tutorial_title: 'Cómo jugar',
+    tutorial_body: 'Busca y toca el patrón que gira',
     tutorial_patch_label: 'Patrón giratorio. Toca para empezar.',
     step_progress: 'Paso {{current}}/{{total}}',
     welcome_title: 'Bienvenido a GaborEye',

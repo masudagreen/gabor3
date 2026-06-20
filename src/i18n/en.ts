@@ -257,7 +257,8 @@ export const en = {
     disclaimer_body:
       'This app is not a medical device. If you feel any pain or discomfort in your eyes, stop using it immediately.',
     distance_preview_label: 'Example patch at this distance',
-    tutorial_title: 'Tap the rotating patch',
+    tutorial_title: 'How to play',
+    tutorial_body: 'Find and tap the rotating patch',
     tutorial_patch_label: 'Rotating patch. Tap to start.',
     step_progress: 'Step {{current}}/{{total}}',
     welcome_title: 'Welcome to GaborEye',

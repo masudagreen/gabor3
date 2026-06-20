@@ -210,8 +210,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         {step === 3 && (
           <View style={styles.stepBody} testID={testId ? `${testId}-step-3` : undefined}>
-            <Text style={[styles.h2, { color: colors.fgPrimary }]}>
+            <Text style={[styles.h1, { color: colors.fgPrimary }]}>
               {t('onboardingV3.tutorial_title')}
+            </Text>
+            <Text
+              style={[styles.body, { color: colors.fgPrimary }]}
+              testID={testId ? `${testId}-tutorial-body` : undefined}
+            >
+              {t('onboardingV3.tutorial_body')}
             </Text>
             <View style={styles.tutorialGrid}>
               {Array.from({ length: TUTORIAL_GRID }, (_, r) => (

@@ -147,6 +147,33 @@ export function totalLevels(
 }
 
 /**
+ * 空間周波数（cpd, cycles per degree）のレベル連動レンジ。
+ * 最易（レベル 1）= CPD_MIN、最難（最高レベル）= CPD_MAX に線形補間する。
+ * CPD_MAX=6 は文献上のヒト・コントラスト感度ピーク（6〜8 cpd）寄りの値。
+ */
+export const CPD_MIN = 1.5;
+export const CPD_MAX = 6;
+
+/**
+ * レベル番号 → 空間周波数（cpd）。レベル 1 で CPD_MIN、最高レベル `total` で CPD_MAX に
+ * 線形補間する（§4.1 の難易度単調順序に沿って高レベルほど高周波＝細かく見えにくい）。
+ *
+ * `total` はレベル範囲設定（variableRanges）で変わりうるため、呼び出し側で
+ * `totalLevels(ranges, order)` を計算して渡すこと。
+ *
+ * - `total <= 1`（有効レベルが 1 段のみ）のときは CPD_MIN を返す（0 除算回避）。
+ * - `level` は [1, total] にクランプする。
+ *
+ * 純関数。
+ */
+export function cpdForLevel(level: number, total: number): number {
+  if (total <= 1) return CPD_MIN;
+  const clamped = Math.min(Math.max(level, 1), total);
+  const ratio = (clamped - 1) / (total - 1);
+  return CPD_MIN + (CPD_MAX - CPD_MIN) * ratio;
+}
+
+/**
  * レベル番号 L（1 始まり）→ 5 変数の実値（spec §4.2）。
  *
  * (L-1) を mixed-radix で展開する。最内側変数（order[0]）が最下位桁。

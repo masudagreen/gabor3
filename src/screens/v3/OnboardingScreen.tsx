@@ -1,15 +1,19 @@
 /**
- * OnboardingScreen.tsx — S7-1 オンボーディング（初回のみ、F-06/F-10）v3.0。
+ * OnboardingScreen.tsx — 初回オンボーディング（初回のみ、F-06/F-10）。
  *
- * 4 ステップ・合計タップ 6 以下（F-06）：
- *   [1/4] 免責同意（DisclaimerPanel）— 理解チェック(1) + 同意(2)。未チェックで同意 disabled。
- *   [2/4] 年齢層（任意）— 選択で自動進行(3)。70 代以上は警告 + 別タップで続行(4)。
- *   [3/4] 視聴距離（30/40/50、既定 40）— 選択で自動進行(distance tap)。
- *   [4/4] ゲーム概要（v3.0：回転のみ）— 「はじめる」(start tap) で完了 → onComplete。
+ * 3 ページ構成（ユーザー要望リデザイン）：
+ *   [1/3] 使用上の注意（免責文）— 「次へ」で進む。同意日時はここで確定。
+ *   [2/3] 視聴距離（30/40/50）— **既定は非選択**。選択で「次へ」活性化。
+ *          選択後、その距離での cpd=3 パッチ例を下部にプレビュー表示。
+ *   [3/3] チュートリアル — 3x3 格子の 1 つが 12 deg/sec で回転。タップで完了 →
+ *          onComplete（呼び出し側で距離リマインドのカウントダウンへ）。
+ *
+ * 年代（ageGroup）はゲーム内容に未使用のため**設問を廃止**し、結果は 'unspecified' 固定で返す
+ * （永続化スキーマは不変）。
  *
  * 完了時に onComplete(result) を呼ぶ。永続化（onboardingCompleted/disclaimerAgreedAt/
  * ageGroup/viewingDistanceCm）は呼び出し側（App）が UserProfile に保存する。
- * セーフエリア準拠（NF-30）。各 CTA 56pt 以上。i18n は onboardingV3.*（v2 から複製・回転のみに改訂）。
+ * セーフエリア準拠（NF-30）。各 CTA 56pt 以上。i18n は onboardingV3.*。
  */
 
 import React from 'react';
@@ -34,12 +38,26 @@ import {
 import { t } from '../../i18n';
 import { webAria } from '../../theme/ariaWeb';
 import { webSpaceActivation } from '../../theme/keyActivation';
-import { DisclaimerPanel } from '../../components/v2/DisclaimerPanel';
 import { SegmentedControl } from '../../components/v2/SegmentedControl';
+import { GaborPatch } from '../../components/GaborPatch';
+import { useGameTimer } from '../../hooks/v2/useGameTimer';
 import type { AgeGroup } from '../../state/v3/schema';
 import type { ViewingDistanceCm } from '../../lib/calibration';
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
+
+/** プレビュー／チュートリアルのパッチ描画パラメータ。 */
+const PREVIEW_CPD = 3; // ユーザー要望：距離プレビューは cpd=3。
+const PATCH_CONTRAST = 0.5;
+const PATCH_SIGMA_DEG = 0.6;
+const PREVIEW_SIZE_PX = 140;
+const TUTORIAL_SIZE_PX = 88;
+const TUTORIAL_GRID = 3; // 3x3。
+const TUTORIAL_CELLS = TUTORIAL_GRID * TUTORIAL_GRID;
+/** チュートリアルの回転速度（ユーザー要望：12 deg/sec）。 */
+const TUTORIAL_ROTATION_DEG_PER_SEC = 12;
+/** 回転駆動用タイマーの十分長い上限（チュートリアルは時間切れ概念なし）。 */
+const TUTORIAL_TIMER_SEC = 1e6;
 
 export type OnboardingResult = {
   ageGroup: AgeGroup;
@@ -52,16 +70,10 @@ export type OnboardingScreenProps = {
   onComplete: (result: OnboardingResult) => void;
   /** 同意日時を採取する時計（テスト決定論）。既定は new Date()。 */
   now?: () => Date;
+  /** チュートリアルで回転させるセル index（テスト決定論）。既定はランダム。 */
+  tutorialTargetIndex?: number;
   testId?: string;
 };
-
-const AGE_OPTIONS: ReadonlyArray<{ value: AgeGroup; label: string }> = [
-  { value: '40s', label: t('onboardingV3.age_40s') },
-  { value: '50s', label: t('onboardingV3.age_50s') },
-  { value: '60s', label: t('onboardingV3.age_60s') },
-  { value: '70s+', label: t('onboardingV3.age_70s') },
-  { value: 'unspecified', label: t('onboardingV3.age_unspecified') },
-];
 
 const DISTANCE_OPTIONS: ReadonlyArray<{
   value: ViewingDistanceCm;
@@ -75,48 +87,47 @@ const DISTANCE_OPTIONS: ReadonlyArray<{
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onComplete,
   now = () => new Date(),
+  tutorialTargetIndex,
   testId,
 }) => {
   const { colors } = useTheme();
-  const focus = useFocusStyle();
 
   const [step, setStep] = React.useState(1);
-  const [understood, setUnderstood] = React.useState(false);
-  const [ageGroup, setAgeGroup] = React.useState<AgeGroup>('unspecified');
-  const [ageChosen, setAgeChosen] = React.useState(false);
-  const [distance, setDistance] = React.useState<ViewingDistanceCm>(40);
+  // 視聴距離は**既定非選択**（null）。選択して初めて「次へ」が活性化する。
+  const [distance, setDistance] = React.useState<ViewingDistanceCm | null>(null);
   const agreedAtRef = React.useRef<string | null>(null);
 
-  // [1/4] 免責同意：チェックで disabled 解除、同意で日時確定 → ステップ 2。
+  // チュートリアルで回転させるセル（マウント時に 1 度だけ確定）。
+  const [targetIndex] = React.useState(() =>
+    tutorialTargetIndex != null
+      ? tutorialTargetIndex
+      : Math.floor(Math.random() * TUTORIAL_CELLS),
+  );
+
+  // 回転駆動：step 3 のときだけ rAF で経過秒を進める。orientationDeg は transform で適用。
+  const { elapsedSec } = useGameTimer({
+    durationSec: TUTORIAL_TIMER_SEC,
+    active: step === 3,
+    roundKey: 'onboarding-tutorial',
+    onTimeout: () => {},
+  });
+  const orientationDeg =
+    (elapsedSec * TUTORIAL_ROTATION_DEG_PER_SEC) % 360;
+
+  // [1/3] 使用上の注意：「次へ」で同意日時を確定しステップ 2 へ。
   const handleAgree = React.useCallback(() => {
-    if (!understood) return;
     agreedAtRef.current = now().toISOString();
     setStep(2);
-  }, [understood, now]);
+  }, [now]);
 
-  // [2/4] 年齢層：選択を記録。70 代以上は警告を残し、別タップ（続行）で進む。
-  const handleAge = React.useCallback((value: AgeGroup) => {
-    setAgeGroup(value);
-    setAgeChosen(true);
-    if (value !== '70s+') {
-      setStep(3);
-    }
-  }, []);
-
-  // [3/4] 視聴距離：選択そのもので自動進行。
-  const handleDistance = React.useCallback((value: ViewingDistanceCm) => {
-    setDistance(value);
-    setStep(4);
-  }, []);
-
-  // [4/4] はじめる：完了通知。
-  const handleStart = React.useCallback(() => {
+  // [3/3] 回転パッチのタップ＝チュートリアル終了 → 完了通知。
+  const handleTutorialTap = React.useCallback(() => {
     onComplete({
-      ageGroup,
-      viewingDistanceCm: distance,
+      ageGroup: 'unspecified',
+      viewingDistanceCm: distance ?? 40,
       disclaimerAgreedAt: agreedAtRef.current ?? now().toISOString(),
     });
-  }, [ageGroup, distance, now, onComplete]);
+  }, [distance, now, onComplete]);
 
   return (
     <SafeAreaView
@@ -140,51 +151,18 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {step === 1 && (
           <View style={styles.stepBody} testID={testId ? `${testId}-step-1` : undefined}>
             <Text style={[styles.h1, { color: colors.fgPrimary }]}>
-              {t('onboardingV3.welcome_title')}
+              {t('onboardingV3.disclaimer_title')}
             </Text>
-            <DisclaimerPanel testId={testId ? `${testId}-disclaimer` : undefined} />
-            <Pressable
-              onPress={() => setUnderstood((v) => !v)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: understood }}
-              accessibilityLabel={t('onboardingV3.understand_check')}
-              // NF-15：RN-Web は accessibilityState を aria-checked へ透過しないため明示付与。
-              {...webAria(
-                'checkbox',
-                { checked: understood },
-                t('onboardingV3.understand_check'),
-              )}
-              // NF-9：Space で選択トグル（Enter は RN-Web 既定が処理。checkbox は Space 未対応のため補完）
-              {...webSpaceActivation(() => setUnderstood((v) => !v))}
-              style={({ pressed }) => [
-                styles.checkRow,
-                focus,
-                pressed && styles.pressed,
-              ]}
-              testID={testId ? `${testId}-understand` : undefined}
+            <Text
+              style={[styles.body, { color: colors.fgPrimary }]}
+              testID={testId ? `${testId}-disclaimer` : undefined}
             >
-              <View
-                style={[
-                  styles.checkbox,
-                  { borderColor: colors.borderStrong },
-                  understood && { backgroundColor: colors.actionPrimary },
-                ]}
-              >
-                {understood && (
-                  <Text style={[styles.checkmark, { color: colors.fgOnPrimary }]}>
-                    ✓
-                  </Text>
-                )}
-              </View>
-              <Text style={[styles.checkLabel, { color: colors.fgPrimary }]}>
-                {t('onboardingV3.understand_check')}
-              </Text>
-            </Pressable>
+              {t('onboardingV3.disclaimer_body')}
+            </Text>
             <PrimaryButton
-              label={t('onboardingV3.agree')}
+              label={t('common.next')}
               onPress={handleAgree}
-              disabled={!understood}
-              testId={testId ? `${testId}-agree` : undefined}
+              testId={testId ? `${testId}-next-1` : undefined}
             />
           </View>
         )}
@@ -192,60 +170,73 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {step === 2 && (
           <View style={styles.stepBody} testID={testId ? `${testId}-step-2` : undefined}>
             <Text style={[styles.h2, { color: colors.fgPrimary }]}>
-              {t('onboardingV3.age_title')}
+              {t('onboardingV3.distance_title')}
             </Text>
-            <SegmentedControl<AgeGroup>
-              options={AGE_OPTIONS}
-              value={ageGroup}
-              onChange={handleAge}
-              accessibilityLabel={t('onboardingV3.age_title')}
+            <SegmentedControl<ViewingDistanceCm>
+              options={DISTANCE_OPTIONS}
+              // null（未選択）時は options に無い値を渡して全 segment 非選択にする。
+              value={(distance ?? -1) as ViewingDistanceCm}
+              onChange={setDistance}
+              accessibilityLabel={t('onboardingV3.distance_title')}
             />
-            {ageChosen && ageGroup === '70s+' && (
-              <>
-                <Text
-                  style={[styles.warning, { color: colors.semanticError }]}
-                  accessibilityRole="text"
-                  testID={testId ? `${testId}-age-warning` : undefined}
-                >
-                  {t('onboardingV3.age_70s_warning')}
-                </Text>
-                <PrimaryButton
-                  label={t('common.next')}
-                  onPress={() => setStep(3)}
-                  testId={testId ? `${testId}-age-continue` : undefined}
+            {/* 距離オプションと「次へ」の間に常に 1 パッチ分の高さを確保し、選択しても
+                「次へ」の位置がずれないようにする（未選択時は空のプレースホルダ）。 */}
+            <View
+              style={styles.previewSlot}
+              testID={testId ? `${testId}-distance-preview` : undefined}
+            >
+              {distance !== null && (
+                <GaborPatch
+                  cpd={PREVIEW_CPD}
+                  contrast={PATCH_CONTRAST}
+                  orientationDeg={0}
+                  phaseRad={0}
+                  sigmaDeg={PATCH_SIGMA_DEG}
+                  sizePx={PREVIEW_SIZE_PX}
+                  viewingDistanceCm={distance}
+                  ariaLabel={t('onboardingV3.distance_preview_label')}
+                  testId={testId ? `${testId}-preview-patch` : undefined}
                 />
-              </>
-            )}
+              )}
+            </View>
+            <PrimaryButton
+              label={t('common.next')}
+              onPress={() => setStep(3)}
+              disabled={distance === null}
+              testId={testId ? `${testId}-next-2` : undefined}
+            />
           </View>
         )}
 
         {step === 3 && (
           <View style={styles.stepBody} testID={testId ? `${testId}-step-3` : undefined}>
             <Text style={[styles.h2, { color: colors.fgPrimary }]}>
-              {t('onboardingV3.distance_title')}
+              {t('onboardingV3.tutorial_title')}
             </Text>
-            <SegmentedControl<ViewingDistanceCm>
-              options={DISTANCE_OPTIONS}
-              value={distance}
-              onChange={handleDistance}
-              accessibilityLabel={t('onboardingV3.distance_title')}
-            />
-          </View>
-        )}
-
-        {step === 4 && (
-          <View style={styles.stepBody} testID={testId ? `${testId}-step-4` : undefined}>
-            <Text style={[styles.h2, { color: colors.fgPrimary }]}>
-              {t('onboardingV3.overview_title')}
-            </Text>
-            <Text style={[styles.body, { color: colors.fgPrimary }]}>
-              {t('onboardingV3.overview_body')}
-            </Text>
-            <PrimaryButton
-              label={t('onboardingV3.start_game')}
-              onPress={handleStart}
-              testId={testId ? `${testId}-start` : undefined}
-            />
+            <View style={styles.tutorialGrid}>
+              {Array.from({ length: TUTORIAL_GRID }, (_, r) => (
+                <View key={`row-${r}`} style={styles.tutorialRow}>
+                  {Array.from({ length: TUTORIAL_GRID }, (_, c) => {
+                    const index = r * TUTORIAL_GRID + c;
+                    const isTarget = index === targetIndex;
+                    return (
+                      <TutorialCell
+                        key={`cell-${index}`}
+                        isTarget={isTarget}
+                        orientationDeg={isTarget ? orientationDeg : 0}
+                        distance={distance ?? 40}
+                        onPress={handleTutorialTap}
+                        testId={
+                          testId
+                            ? `${testId}-tutorial-cell-${index}`
+                            : undefined
+                        }
+                      />
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
           </View>
         )}
 
@@ -265,6 +256,67 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+};
+
+/**
+ * チュートリアル 1 セル。回転対象（isTarget）のみタップ可能（onPress）で a11y ラベルを持つ。
+ * 非対象は装飾（SR から隠す）。
+ */
+const TutorialCell: React.FC<{
+  isTarget: boolean;
+  orientationDeg: number;
+  distance: ViewingDistanceCm;
+  onPress: () => void;
+  testId?: string;
+}> = ({ isTarget, orientationDeg, distance, onPress, testId }) => {
+  const focus = useFocusStyle();
+  const label = t('onboardingV3.tutorial_patch_label');
+
+  const patch = (
+    <GaborPatch
+      cpd={PREVIEW_CPD}
+      contrast={PATCH_CONTRAST}
+      orientationDeg={orientationDeg}
+      phaseRad={0}
+      sigmaDeg={PATCH_SIGMA_DEG}
+      sizePx={TUTORIAL_SIZE_PX}
+      viewingDistanceCm={distance}
+    />
+  );
+
+  if (!isTarget) {
+    // 静止セルは装飾。SR から隠してチュートリアルのフォーカスを回転対象に集約する。
+    return (
+      <View
+        style={styles.tutorialCell}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        {...({ 'aria-hidden': true } as any)}
+        pointerEvents="none"
+      >
+        {patch}
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      {...webAria('button', undefined, label)}
+      {...webSpaceActivation(onPress)}
+      style={({ pressed }) => [
+        styles.tutorialCell,
+        focus,
+        pressed && styles.pressed,
+      ]}
+      testID={testId}
+    >
+      {patch}
+    </Pressable>
   );
 };
 
@@ -329,29 +381,27 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     lineHeight: fontSize.body * lineHeight.body,
   },
-  warning: {
-    fontSize: fontSize.body,
-    fontWeight: fontWeight.bold,
-    lineHeight: fontSize.body * lineHeight.body,
-  },
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.s3,
-    minHeight: tapTarget.recommended,
-  },
-  checkbox: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    borderWidth: 2,
+  previewSlot: {
+    height: PREVIEW_SIZE_PX,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkmark: { fontSize: 22, fontWeight: '900', lineHeight: 24 },
-  checkLabel: {
-    fontSize: fontSize.body,
-    flexShrink: 1,
+  tutorialGrid: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.s3,
+    paddingTop: spacing.s3,
+  },
+  tutorialRow: {
+    flexDirection: 'row',
+    gap: spacing.s3,
+  },
+  tutorialCell: {
+    width: TUTORIAL_SIZE_PX,
+    height: TUTORIAL_SIZE_PX,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
   },
   cta: {
     minHeight: tapTarget.recommended,

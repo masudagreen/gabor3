@@ -252,6 +252,11 @@ export const zh = {
     down_announce: '等级降低了1级。从等级 {{from}} 降至 {{to}}',
   },
   onboardingV3: {
+    disclaimer_title: '使用须知',
+    disclaimer_body: '本应用并非医疗器械。如果眼睛感到疼痛或不适，请立即停止使用。',
+    distance_preview_label: '此距离下的图案示例',
+    tutorial_title: '点击正在旋转的图案',
+    tutorial_patch_label: '旋转的图案。点击开始。',
     step_progress: '第 {{current}}/{{total}} 步',
     welcome_title: '欢迎来到 GaborEye',
     understand_check: '我已了解',

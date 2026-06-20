@@ -253,6 +253,12 @@ export const pt = {
     down_announce: 'Nível reduzido em 1. Do nível {{from}} para {{to}}',
   },
   onboardingV3: {
+    disclaimer_title: 'Aviso importante',
+    disclaimer_body:
+      'Este aplicativo não é um dispositivo médico. Se sentir dor ou desconforto nos olhos, pare de usá-lo imediatamente.',
+    distance_preview_label: 'Exemplo de padrão nesta distância',
+    tutorial_title: 'Toque no padrão que gira',
+    tutorial_patch_label: 'Padrão giratório. Toque para começar.',
     step_progress: 'Passo {{current}}/{{total}}',
     welcome_title: 'Bem-vindo ao GaborEye',
     understand_check: 'Eu entendo',

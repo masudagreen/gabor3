@@ -253,6 +253,12 @@ export const ru = {
     down_announce: 'Уровень снижен на 1. С уровня {{from}} до {{to}}',
   },
   onboardingV3: {
+    disclaimer_title: 'Важное примечание',
+    disclaimer_body:
+      'Это приложение не является медицинским устройством. Если вы почувствуете боль или дискомфорт в глазах, немедленно прекратите использование.',
+    distance_preview_label: 'Пример патча на этом расстоянии',
+    tutorial_title: 'Нажмите на вращающийся патч',
+    tutorial_patch_label: 'Вращающийся патч. Нажмите, чтобы начать.',
     step_progress: 'Шаг {{current}}/{{total}}',
     welcome_title: 'Добро пожаловать в GaborEye',
     understand_check: 'Я понимаю',

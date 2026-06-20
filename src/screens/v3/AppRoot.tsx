@@ -42,6 +42,10 @@ import { SettingsScreen } from './SettingsScreen';
 import {
   initialLevelState,
   levelToParams,
+  totalLevels,
+  cpdForLevel,
+  defaultVariableRanges,
+  DEFAULT_VARIABLE_ORDER,
   type LevelState,
   type GameResult,
   type VariableRanges,
@@ -217,6 +221,14 @@ export const AppRoot: React.FC<AppRootProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.levelState.currentLevel, roundKey, ranges, order]);
 
+  // 空間周波数（cpd）はレベル連動：最高レベル（範囲設定で変わる）を先に求めて補間する。
+  // 最易レベル=1.5cpd、最難レベル=6cpd（cpdForLevel）。ranges/order 未指定はデフォルト（720）。
+  const cpd = React.useMemo(() => {
+    const effRanges = ranges ?? defaultVariableRanges();
+    const effOrder = order ?? DEFAULT_VARIABLE_ORDER;
+    return cpdForLevel(config.level, totalLevels(effRanges, effOrder));
+  }, [config.level, ranges, order]);
+
   // セッション残り時間（上部バー、ラウンド開始時点。GameScreen が経過分を引いて毎秒表示）。
   const remainingSessionSec = Math.max(0, session.limitSec - session.elapsedSec);
 
@@ -343,25 +355,24 @@ export const AppRoot: React.FC<AppRootProps> = ({
     setGamePlaying(false);
     resolvingRef.current = false;
 
-    // 完了済みラウンドがあれば SessionRecord 記録（その時点まで、§7.4）。0 件なら未記録。
-    if (session.totals.roundCount > 0) {
-      void (async () => {
-        if (onFinalizeSession) {
-          await onFinalizeSession({ session, abort: true });
-        }
-      })();
-    }
-    // 完了済みラウンドのレベル変化は LevelState に永続済み → 次セッションの開始レベルに反映。
-    setLevelState(session.levelState);
-
     if (trigger?.source === 'tab') {
+      // タブ移動起点：完了済みラウンドがあれば記録し、当該タブへ遷移する。
+      // ホームへ戻ったときは距離リマインドから新セッション開始。
+      if (session.totals.roundCount > 0 && onFinalizeSession) {
+        void onFinalizeSession({ session, abort: true });
+      }
+      // 完了済みラウンドのレベル変化は LevelState に永続済み → 次セッションの開始レベルに反映。
+      setLevelState(session.levelState);
       setHomePhase('distance');
       setTab(trigger.pendingTab);
     } else {
-      setHomePhase('distance');
+      // × 起点：セッション終了 → 要約（SessionSummaryCard）を表示する。
+      // 距離リマインドへ戻すと自動で新セッションが始まり「終われない」ため、要約で止める。
+      // finalizeAndShowSummary 内で LevelState 永続・記録（完了ラウンドありのとき）・要約表示を行う。
       setTab('home');
+      void finalizeAndShowSummary(session, true);
     }
-  }, [abort, session, onFinalizeSession]);
+  }, [abort, session, onFinalizeSession, finalizeAndShowSummary]);
 
   // キャンセル（続ける）：ダイアログ閉、ラウンド継続（paused 解除で残り時間・選択保持）。
   const cancelAbort = React.useCallback(() => {
@@ -426,6 +437,7 @@ export const AppRoot: React.FC<AppRootProps> = ({
       <GameScreen
         key={`${config.level}-${roundKey}`}
         config={config}
+        cpd={cpd}
         viewingDistanceCm={viewingDistanceCm}
         dpi={dpi}
         rng={rng}

@@ -17,6 +17,9 @@ import {
   defaultVariableRanges,
   fullVariableRanges,
   totalLevels,
+  cpdForLevel,
+  CPD_MIN,
+  CPD_MAX,
   levelToParams,
   paramsToLevel,
   initialLevelState,
@@ -120,6 +123,58 @@ describe('totalLevels（§4.2 総レベル数 = 段数の積）', () => {
       rotationSpeed: [6],
     };
     expect(totalLevels(ranges)).toBe(1);
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// cpdForLevel（空間周波数のレベル連動補間）
+// ───────────────────────────────────────────────────────────
+
+describe('cpdForLevel（レベル → 空間周波数 cpd 線形補間）', () => {
+  it('定数は 1.5 → 6', () => {
+    expect(CPD_MIN).toBe(1.5);
+    expect(CPD_MAX).toBe(6);
+  });
+
+  it('レベル 1（最易）は CPD_MIN', () => {
+    expect(cpdForLevel(1, 720)).toBe(CPD_MIN);
+  });
+
+  it('最高レベルは CPD_MAX', () => {
+    expect(cpdForLevel(720, 720)).toBe(CPD_MAX);
+  });
+
+  it('中間レベルは線形補間（中央で (MIN+MAX)/2）', () => {
+    // total=5 → level 3 は ratio 0.5
+    expect(cpdForLevel(3, 5)).toBeCloseTo((CPD_MIN + CPD_MAX) / 2, 10);
+  });
+
+  it('total が範囲設定で変わっても両端は MIN/MAX に張り付く', () => {
+    expect(cpdForLevel(1, 24)).toBe(CPD_MIN);
+    expect(cpdForLevel(24, 24)).toBe(CPD_MAX);
+    expect(cpdForLevel(1, 6864)).toBe(CPD_MIN);
+    expect(cpdForLevel(6864, 6864)).toBe(CPD_MAX);
+  });
+
+  it('total <= 1（レベル 1 段のみ）は CPD_MIN を返す（0 除算回避）', () => {
+    expect(cpdForLevel(1, 1)).toBe(CPD_MIN);
+    expect(cpdForLevel(1, 0)).toBe(CPD_MIN);
+  });
+
+  it('範囲外レベルは [1, total] にクランプ', () => {
+    expect(cpdForLevel(0, 720)).toBe(CPD_MIN);
+    expect(cpdForLevel(-5, 720)).toBe(CPD_MIN);
+    expect(cpdForLevel(9999, 720)).toBe(CPD_MAX);
+  });
+
+  it('単調増加（高レベルほど高 cpd）', () => {
+    const total = 720;
+    let prev = cpdForLevel(1, total);
+    for (let l = 2; l <= total; l += 50) {
+      const cur = cpdForLevel(l, total);
+      expect(cur).toBeGreaterThan(prev);
+      prev = cur;
+    }
   });
 });
 

@@ -9,7 +9,8 @@
  *   t に応じて毎フレーム orientationDeg を更新しても BMP は不変。
  *   振動は patchOrientationAt が三角波で往復角を返すため、時計回り↔反時計回りが観察できる
  *  （NF-28c）。reduced-motion でも止めない（NF-13、課題上必須）。
- * - 空間周波数：v3 は回転のみ（cpd は固定。patch には保持せず描画は基準 cpd を使う）。
+ * - 空間周波数：刺激アニメは回転のみ（ラウンド内 cpd 不変）。cpd 自体はレベル連動で、
+ *   patch には保持せず cpd prop（未指定時 PATCH_CPD=1.5）を描画に使う。
  *
  * 選択中は控えめ枠（selectionV2.subtle 2px、縞の視認を阻害しない）。
  * 結果開示中は ResultMark を子レイヤとして重畳（中央配置）。
@@ -32,15 +33,18 @@ import type { RevealKind } from '../../lib/v3/gameMachine';
 import { t } from '../../i18n';
 import { ResultMark } from './ResultMark';
 
-/** ガボールのコントラスト・ガウス窓・基準 cpd（system §7 既定、v3 は cpd 固定）。 */
+/** ガボールのコントラスト・ガウス窓・基準 cpd（system §7 既定）。 */
 const PATCH_CONTRAST = 0.5;
 const PATCH_SIGMA_DEG = 0.6;
-const PATCH_CPD = 1.5; // ユーザー要望により周波数を半分に（元 3 cpd）
+/** cpd 既定値（cpd prop 未指定時のフォールバック。レベル連動の最易値=1.5 と一致）。 */
+const PATCH_CPD = 1.5;
 
 export type GaborPatchCellProps = {
   patch: PatchDef;
   /** 格子サイズ n（行/列ラベル算出用） */
   gridSize: number;
+  /** 空間周波数（cpd）。レベル連動。未指定時は PATCH_CPD（1.5）。 */
+  cpd?: number;
   /** セル辺長（px） */
   sizePx: number;
   /** 経過秒（描画更新の駆動） */
@@ -59,6 +63,7 @@ export type GaborPatchCellProps = {
 const GaborPatchCellInner: React.FC<GaborPatchCellProps> = ({
   patch,
   gridSize,
+  cpd = PATCH_CPD,
   sizePx,
   elapsedSec,
   selected,
@@ -77,7 +82,7 @@ const GaborPatchCellInner: React.FC<GaborPatchCellProps> = ({
   const col = (patch.index % gridSize) + 1;
   const label = t('gameV3.patch_label', { row, col });
 
-  // 回転は transform で連続更新（BMP 不変）。cpd は固定。
+  // 回転は transform で連続更新（BMP 不変）。cpd はラウンド内（=1 レベル）一定（レベル連動）。
   const orientationDeg = patchOrientationAt(patch, elapsedSec);
 
   const showMark = revealKind && revealKind !== 'none';
@@ -115,7 +120,7 @@ const GaborPatchCellInner: React.FC<GaborPatchCellProps> = ({
         pointerEvents="none"
       >
         <GaborPatch
-          cpd={PATCH_CPD}
+          cpd={cpd}
           contrast={PATCH_CONTRAST}
           orientationDeg={orientationDeg}
           phaseRad={0}

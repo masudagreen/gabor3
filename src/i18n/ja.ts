@@ -307,6 +307,12 @@ export const ja = {
   },
   // v3.0 オンボーディング（ON-1、F-06/F-10、system §14）。
   onboardingV3: {
+    disclaimer_title: '使用上の注意',
+    disclaimer_body:
+      '本アプリは医療機器ではありません。目に痛みや違和感を感じたら、ただちに使用を中止してください。',
+    distance_preview_label: 'この距離で見えるパッチの例',
+    tutorial_title: '回転しているパッチをタップしてください',
+    tutorial_patch_label: '回転しているパッチ。タップして始めましょう',
     step_progress: 'ステップ {{current}}/{{total}}',
     welcome_title: 'GaborEye へようこそ',
     understand_check: '内容を理解しました',

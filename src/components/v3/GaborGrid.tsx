@@ -49,6 +49,8 @@ export function computePatchSize(
 export type GaborGridProps = {
   patches: readonly PatchDef[];
   gridSize: number;
+  /** 空間周波数（cpd）。レベル連動。未指定時は GaborPatchCell の既定（1.5）。 */
+  cpd?: number;
   /** 画面短辺（px）。レイアウト算出用 */
   shortEdgePx: number;
   elapsedSec: number;
@@ -66,6 +68,7 @@ export type GaborGridProps = {
 const GaborGridInner: React.FC<GaborGridProps> = ({
   patches,
   gridSize,
+  cpd,
   shortEdgePx,
   elapsedSec,
   selected,
@@ -116,6 +119,7 @@ const GaborGridInner: React.FC<GaborGridProps> = ({
                 <GaborPatchCell
                   patch={patch}
                   gridSize={gridSize}
+                  cpd={cpd}
                   sizePx={patchSize}
                   elapsedSec={elapsedSec}
                   selected={selected.has(index)}

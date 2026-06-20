@@ -44,6 +44,11 @@ import { t } from '../../i18n';
 
 export type GameScreenProps = {
   config: GameConfig;
+  /**
+   * 空間周波数（cpd）。レベル連動でレベル 1=1.5、最高レベル=6（AppRoot で cpdForLevel 算出）。
+   * 未指定時は GaborPatchCell の既定（1.5）。
+   */
+  cpd?: number;
   viewingDistanceCm: ViewingDistanceCm;
   dpi?: number;
   /** 乱数注入（テスト決定論）。未指定は Math.random */
@@ -82,6 +87,7 @@ export type GameScreenProps = {
 
 export const GameScreen: React.FC<GameScreenProps> = ({
   config,
+  cpd,
   viewingDistanceCm,
   dpi,
   rng = Math.random,
@@ -257,6 +263,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           <GaborGrid
             patches={state.patches}
             gridSize={config.params.gridSize}
+            cpd={cpd}
             shortEdgePx={shortEdgePx}
             elapsedSec={elapsedSec}
             selected={state.selected}

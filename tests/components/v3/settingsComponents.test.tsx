@@ -127,9 +127,8 @@ describe('VariableOrderList（OR-1）', () => {
     wrap(
       <VariableOrderList items={[...items]} onReorder={jest.fn()} testId="or" />,
     );
-    // ラベルは i18n キー（settingsV3.order_move_up/down）経由。テスト環境=en。
-    expect(screen.getByLabelText('Move 時間 up')).toBeTruthy();
-    expect(screen.getByLabelText('Move 時間 down')).toBeTruthy();
+    expect(screen.getByLabelText('時間を 1 つ上へ')).toBeTruthy();
+    expect(screen.getByLabelText('時間を 1 つ下へ')).toBeTruthy();
   });
 
   it('移動時に onMoved(label, position) を呼ぶ', () => {

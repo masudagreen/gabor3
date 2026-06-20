@@ -30,6 +30,12 @@ jest.mock('react-native-worklets', () =>
   require('react-native-worklets/lib/module/mock'),
 );
 
+// テストは日本語ロケール前提（アプリは元々日本語のみ。多言語化後もテストは ja で検証する）。
+// 多言語化（7言語・端末ロケール追従）で t() の既定が 'en' になり、日本語文字列を期待する
+// 既存テストが全滅したため、setupFiles 段階で明示的に ja に固定する（プロダクト挙動は不変）。
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+require('./src/i18n').setLocale('ja');
+
 // Expo Vector Icons のモック（テスト中の非同期フォントロードによる警告を防止）
 jest.mock('@expo/vector-icons', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports

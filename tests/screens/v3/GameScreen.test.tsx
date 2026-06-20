@@ -135,7 +135,7 @@ describe('GameScreen v3 時間切れ失敗（F-03/F-12）', () => {
 });
 
 describe('GameScreen v3.1 締切後 3 秒開示カウントダウン（F-03/AS-25）', () => {
-  it('締切後に disclosure カウントダウンを表示し、3/2/1 でティック音、0 で onResolved', () => {
+  it('締切後に disclosure カウントダウンを表示し、開示中はティック音なし、0 で onResolved', () => {
     jest.useFakeTimers();
     const config = configForLevel(7);
     const { onResolved, onFeedback } = renderGame({
@@ -165,11 +165,12 @@ describe('GameScreen v3.1 締切後 3 秒開示カウントダウン（F-03/AS-2
     });
     expect(onResolved).toHaveBeenCalledTimes(1);
 
-    // 開示カウントダウンで 3/2/1 のティック音が出ている（締切時の fail/tick とは別系統）。
+    // 開示（次ラウンドへの）カウントダウン中はティック音を出さない（ユーザー要望、GameScreen 参照）。
+    // 締切時の clear/fail フィードバックとは別系統で、countdown-tick はこの区間で発火しない。
     const discTicks = onFeedback.mock.calls
       .filter((c) => c[0].type === 'countdown-tick')
       .map((c) => c[0].remainingSec);
-    expect(discTicks).toEqual(expect.arrayContaining([3, 2, 1]));
+    expect(discTicks).toEqual([]);
     jest.useRealTimers();
   });
 });

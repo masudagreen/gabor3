@@ -14,9 +14,14 @@
 // 1. 5 変数の値集合とキー（spec §4.1、確定値・易 → 難順）
 // ───────────────────────────────────────────────────────────
 
-/** レベルを決める 5 変数のキー。 */
+/**
+ * レベルを決める変数のキー（v3.2）。
+ * 最内側 `repeat`（繰り返し回数、radix=n）＋外側 4 変数。
+ * v3.1 の `count`（個数）は難易度軸から除外し（→ roundGen で countRange ランダム）、
+ * 代わりに `repeat` を最内側軸として追加した（spec §4.1/§4.2・AS-35）。
+ */
 export type VariableKey =
-  | 'count'
+  | 'repeat'
   | 'seconds'
   | 'direction'
   | 'gridSize'
@@ -32,16 +37,18 @@ export type GridSize = 3 | 4 | 5 | 6;
  * 各変数の**全集合**（易 → 難順、spec §4.1 v3.1 拡張）。
  * インデックス 0 が最易。配列の並びが難易度の単調順序を表す。
  *
- * v3.1 で各変数を両側／難側に拡張した（§4.1）：
- * - count: 5,6 を難側に追加。
+ * 外側 4 変数（v3.1）は両側／難側に拡張済み（§4.1）：
  * - seconds: 60,55,50,45（長い=易）と 15,10（短い=難）を両側に追加。
  * - gridSize: 5x5,6x6 を難側に追加。
  * - rotationSpeed: 7,6.5（速い=易）と 1.5,1（遅い=難）を両側に追加。
  *
- * **既定の有効集合は `defaultVariableRanges()`（v3.0 と同一）であり、追加値は既定 OFF**（AS-27）。
+ * `repeat`（v3.2）は最内側軸で、有効範囲 = [1..n]（n=repeatCount 設定、1〜6・既定 4）。
+ * 各値は同一難易度の「全て探せ」1 ラウンドを表し、難易度は変えない（spec §4.1/§4.2・AS-35）。
+ *
+ * **既定の有効集合は `defaultVariableRanges()`（n=4・外側 v3.0 同一）であり、追加値は既定 OFF**（AS-27）。
  */
 export const VALUE_SETS = {
-  count: [1, 2, 3, 4, 5, 6] as const,
+  repeat: [1, 2, 3, 4, 5, 6] as const,
   seconds: [60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10] as const,
   direction: ['one-way', 'oscillate'] as const,
   gridSize: [3, 4, 5, 6] as const,
@@ -49,24 +56,39 @@ export const VALUE_SETS = {
 } as const;
 
 /**
- * v3.0 と同一の「既定の有効集合」（spec §4.1 / §7.2「既定 ON」列・AS-27）。
- * 追加値（個数 5/6・時間 60/55/50/45/15/10・サイズ 5x5/6x6・回転速度 7/6.5/1.5/1）は
- * デフォルト OFF。総レベル数 = 4×5×2×2×9 = 720（v3.0 と不変）。
+ * 「既定の有効集合」（spec §4.1 / §7.2「既定 ON」列・AS-27/AS-37）。
+ * 外側 4 変数は v3.0 と同一。`repeat` は既定 n=4 → [1,2,3,4]。
+ * 追加値（時間 60/55/50/45/15/10・サイズ 5x5/6x6・回転速度 7/6.5/1.5/1）はデフォルト OFF。
+ * 総レベル数 = n×(5×2×2×9) = 4×180 = 720（v3.1 と不変）。
  */
 export const DEFAULT_VALUE_SETS = {
-  count: [1, 2, 3, 4] as const,
+  repeat: [1, 2, 3, 4] as const,
   seconds: [40, 35, 30, 25, 20] as const,
   direction: ['one-way', 'oscillate'] as const,
   gridSize: [3, 4] as const,
   rotationSpeed: [6, 5.5, 5, 4.5, 4, 3.5, 3, 2.5, 2] as const,
 } as const;
 
+/** repeat 軸の radix の許容範囲（設定 repeatCount、spec §4.1/AS-37）。 */
+export const MIN_REPEAT_COUNT = 1;
+export const MAX_REPEAT_COUNT = 6;
+export const DEFAULT_REPEAT_COUNT = 4;
+
 /**
- * デフォルトの変化順（最内側 LSB → 最外側 MSB、spec §4.2 / AS-3）。
- * 個数 → 時間 → 回転方向 → サイズ → 回転速度。
+ * デフォルトの変化順（最内側 LSB → 最外側 MSB、spec §4.2 / AS-35）。
+ * 繰り返し → 時間 → 回転方向 → サイズ → 回転速度。
+ * **`repeat` は常に最内側固定**（設定の変化順組み替え対象は外側 4 変数のみ）。
  */
 export const DEFAULT_VARIABLE_ORDER: readonly VariableKey[] = [
-  'count',
+  'repeat',
+  'seconds',
+  'direction',
+  'gridSize',
+  'rotationSpeed',
+];
+
+/** 変化順の組み替え対象となる外側 4 変数（repeat を除く、spec §4.2）。 */
+export const OUTER_VARIABLE_KEYS: readonly VariableKey[] = [
   'seconds',
   'direction',
   'gridSize',
@@ -79,7 +101,8 @@ export const DEFAULT_VARIABLE_ORDER: readonly VariableKey[] = [
  * S2 ではデフォルト = フル範囲を受け取る純関数として扱う（S3 で永続化）。
  */
 export interface VariableRanges {
-  count: readonly number[];
+  /** 繰り返し軸の有効範囲 = [1..n]（n=repeatCount）。最内側固定（spec §4.2・AS-35/AS-37）。 */
+  repeat: readonly number[];
   seconds: readonly number[];
   direction: readonly Direction[];
   gridSize: readonly GridSize[];
@@ -92,12 +115,21 @@ export interface VariableRanges {
  */
 export function defaultVariableRanges(): VariableRanges {
   return {
-    count: [...DEFAULT_VALUE_SETS.count],
+    repeat: [...DEFAULT_VALUE_SETS.repeat],
     seconds: [...DEFAULT_VALUE_SETS.seconds],
     direction: [...DEFAULT_VALUE_SETS.direction],
     gridSize: [...DEFAULT_VALUE_SETS.gridSize],
     rotationSpeed: [...DEFAULT_VALUE_SETS.rotationSpeed],
   };
+}
+
+/** repeatCount（n）から repeat 軸の有効範囲 [1..n] を作る（spec §4.1・AS-37）。 */
+export function repeatRange(repeatCount: number): number[] {
+  const n = Math.min(
+    Math.max(Math.trunc(repeatCount), MIN_REPEAT_COUNT),
+    MAX_REPEAT_COUNT,
+  );
+  return VALUE_SETS.repeat.slice(0, n);
 }
 
 /**
@@ -106,7 +138,7 @@ export function defaultVariableRanges(): VariableRanges {
  */
 export function fullVariableRanges(): VariableRanges {
   return {
-    count: [...VALUE_SETS.count],
+    repeat: [...VALUE_SETS.repeat],
     seconds: [...VALUE_SETS.seconds],
     direction: [...VALUE_SETS.direction],
     gridSize: [...VALUE_SETS.gridSize],
@@ -114,9 +146,13 @@ export function fullVariableRanges(): VariableRanges {
   };
 }
 
-/** あるレベルが決定する 5 変数の実値（spec §7.4 GameRecord.levelParams 相当）。 */
+/**
+ * あるレベルが決定する変数の実値（spec §4.2）。
+ * `repeat`＝繰り返し回（1..n、難易度中立）。個数は含まない（roundGen で countRange ランダム）。
+ */
 export interface LevelParams {
-  count: number;
+  /** 繰り返し回（1..n）。難易度は変えず、何回目のラウンドかを表す（spec §4.2・AS-35）。 */
+  repeat: number;
   seconds: number;
   direction: Direction;
   gridSize: GridSize;
@@ -206,7 +242,7 @@ export function levelToParams(
   }
 
   return {
-    count: ranges.count[indices.get('count')!],
+    repeat: ranges.repeat[indices.get('repeat')!],
     seconds: ranges.seconds[indices.get('seconds')!],
     direction: ranges.direction[indices.get('direction')!],
     gridSize: ranges.gridSize[indices.get('gridSize')!],

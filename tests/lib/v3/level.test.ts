@@ -1,8 +1,12 @@
 /**
- * level.test.ts — v3.0 レベルシステム中核ロジックの単体テスト（spec §4 / F-04）。
+ * level.test.ts — v3.2 レベルシステム中核ロジックの単体テスト（spec §4 / F-04）。
+ *
+ * v3.2 改訂：最内側の難易度軸が `count`（個数）から `repeat`（繰り返し回数・難易度中立）
+ * に置き換わった。梯子の形（既定 n=4 → [1,2,3,4]・総レベル数 720）は v3.1 と一致する。
  *
  * 検証範囲：
- * - 値集合とキー（§4.1 確定値）
+ * - 値集合とキー（§4.1 確定値・repeat 軸）
+ * - repeatRange / OUTER_VARIABLE_KEYS / repeat radix の n 変更で総レベル数 n×180（§4.1/AS-37）
  * - mixed-radix オドメータ：levelToParams / paramsToLevel / totalLevels（§4.2）
  *   境界・桁上がり（L1/L2/L4→L5/L20→L21/L720）・部分範囲・代替変化順
  * - レベル昇降：applyResult（§4.4, F-04）クリア+1/失敗1回不変/2連続失敗−1/
@@ -14,8 +18,13 @@ import {
   VALUE_SETS,
   DEFAULT_VALUE_SETS,
   DEFAULT_VARIABLE_ORDER,
+  OUTER_VARIABLE_KEYS,
+  MIN_REPEAT_COUNT,
+  MAX_REPEAT_COUNT,
+  DEFAULT_REPEAT_COUNT,
   defaultVariableRanges,
   fullVariableRanges,
+  repeatRange,
   totalLevels,
   cpdForLevel,
   CPD_MIN,
@@ -27,6 +36,7 @@ import {
   clampLevelToRange,
   clampLevelState,
   type VariableRanges,
+  type VariableKey,
   type LevelState,
   type LevelParams,
 } from '../../../src/lib/v3/level';
@@ -34,12 +44,12 @@ import {
 const FULL = defaultVariableRanges();
 
 // ───────────────────────────────────────────────────────────
-// §4.1 値集合とキー
+// §4.1 値集合とキー（v3.2：最内側 repeat）
 // ───────────────────────────────────────────────────────────
 
-describe('VALUE_SETS（§4.1 拡張全集合・易 → 難、v3.1）', () => {
-  it('全集合が spec §4.1 v3.1 拡張と一致する', () => {
-    expect(VALUE_SETS.count).toEqual([1, 2, 3, 4, 5, 6]);
+describe('VALUE_SETS（§4.1 拡張全集合・易 → 難、v3.2）', () => {
+  it('全集合が spec §4.1 v3.2 と一致する（repeat 軸 1..6）', () => {
+    expect(VALUE_SETS.repeat).toEqual([1, 2, 3, 4, 5, 6]);
     expect(VALUE_SETS.seconds).toEqual([60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10]);
     expect(VALUE_SETS.direction).toEqual(['one-way', 'oscillate']);
     expect(VALUE_SETS.gridSize).toEqual([3, 4, 5, 6]);
@@ -48,12 +58,16 @@ describe('VALUE_SETS（§4.1 拡張全集合・易 → 難、v3.1）', () => {
     ]);
   });
 
+  it('count 軸は廃止され VALUE_SETS に存在しない', () => {
+    expect('count' in VALUE_SETS).toBe(false);
+  });
+
   it('全集合をすべて ON にした理論上限は 6×11×2×4×13 = 6864', () => {
     expect(totalLevels(fullVariableRanges(), DEFAULT_VARIABLE_ORDER)).toBe(6864);
   });
 
   it('インデックス 0 が各変数の最易値（全集合）', () => {
-    expect(VALUE_SETS.count[0]).toBe(1);
+    expect(VALUE_SETS.repeat[0]).toBe(1);
     expect(VALUE_SETS.seconds[0]).toBe(60);
     expect(VALUE_SETS.direction[0]).toBe('one-way');
     expect(VALUE_SETS.gridSize[0]).toBe(3);
@@ -61,30 +75,78 @@ describe('VALUE_SETS（§4.1 拡張全集合・易 → 難、v3.1）', () => {
   });
 
   it('各変数の末尾が最難値（全集合）', () => {
-    expect(VALUE_SETS.count.at(-1)).toBe(6);
+    expect(VALUE_SETS.repeat.at(-1)).toBe(6);
     expect(VALUE_SETS.seconds.at(-1)).toBe(10);
     expect(VALUE_SETS.direction.at(-1)).toBe('oscillate');
     expect(VALUE_SETS.gridSize.at(-1)).toBe(6);
     expect(VALUE_SETS.rotationSpeed.at(-1)).toBe(1);
   });
 
-  it('既定の有効集合（DEFAULT_VALUE_SETS / defaultVariableRanges）は v3.0 と同一（追加値 OFF・720）', () => {
-    expect(DEFAULT_VALUE_SETS.count).toEqual([1, 2, 3, 4]);
+  it('既定の有効集合（DEFAULT_VALUE_SETS / defaultVariableRanges）は v3.1 と同一（追加値 OFF・720）', () => {
+    expect(DEFAULT_VALUE_SETS.repeat).toEqual([1, 2, 3, 4]);
     expect(DEFAULT_VALUE_SETS.seconds).toEqual([40, 35, 30, 25, 20]);
     expect(DEFAULT_VALUE_SETS.gridSize).toEqual([3, 4]);
     expect(DEFAULT_VALUE_SETS.rotationSpeed).toEqual([6, 5.5, 5, 4.5, 4, 3.5, 3, 2.5, 2]);
-    expect(defaultVariableRanges().count).toEqual([1, 2, 3, 4]);
+    expect(defaultVariableRanges().repeat).toEqual([1, 2, 3, 4]);
     expect(totalLevels(defaultVariableRanges(), DEFAULT_VARIABLE_ORDER)).toBe(720);
   });
 
-  it('デフォルト変化順は個数→時間→方向→サイズ→速度（最内側→最外側）', () => {
+  it('デフォルト変化順は repeat→時間→方向→サイズ→速度（最内側→最外側）', () => {
     expect(DEFAULT_VARIABLE_ORDER).toEqual([
-      'count',
+      'repeat',
       'seconds',
       'direction',
       'gridSize',
       'rotationSpeed',
     ]);
+  });
+
+  it('OUTER_VARIABLE_KEYS は repeat を除く外側 4 変数（変化順組み替え対象）', () => {
+    expect(OUTER_VARIABLE_KEYS).toEqual([
+      'seconds',
+      'direction',
+      'gridSize',
+      'rotationSpeed',
+    ]);
+    expect(OUTER_VARIABLE_KEYS).not.toContain('repeat');
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// §4.1 repeatRange（最内側 radix = repeatCount → [1..n]）
+// ───────────────────────────────────────────────────────────
+
+describe('repeatRange / repeat radix（§4.1 / AS-37）', () => {
+  it('repeat 範囲の許容値域は 1〜6・既定 4', () => {
+    expect(MIN_REPEAT_COUNT).toBe(1);
+    expect(MAX_REPEAT_COUNT).toBe(6);
+    expect(DEFAULT_REPEAT_COUNT).toBe(4);
+  });
+
+  it('repeatRange(n) = [1..n]', () => {
+    expect(repeatRange(1)).toEqual([1]);
+    expect(repeatRange(2)).toEqual([1, 2]);
+    expect(repeatRange(4)).toEqual([1, 2, 3, 4]);
+    expect(repeatRange(6)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('repeatRange は 1〜6 にクランプ（非整数は切り捨て）', () => {
+    expect(repeatRange(0)).toEqual([1]);
+    expect(repeatRange(-3)).toEqual([1]);
+    expect(repeatRange(99)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(repeatRange(3.9)).toEqual([1, 2, 3]);
+  });
+
+  it('n を変えると総レベル数 = n×180（外側 180 不変）', () => {
+    for (let n = MIN_REPEAT_COUNT; n <= MAX_REPEAT_COUNT; n++) {
+      const ranges: VariableRanges = { ...FULL, repeat: repeatRange(n) };
+      expect(totalLevels(ranges, DEFAULT_VARIABLE_ORDER)).toBe(n * 180);
+    }
+  });
+
+  it('既定 n=4 で総レベル数 720（v3.1 と一致）', () => {
+    const ranges: VariableRanges = { ...FULL, repeat: repeatRange(DEFAULT_REPEAT_COUNT) };
+    expect(totalLevels(ranges, DEFAULT_VARIABLE_ORDER)).toBe(720);
   });
 });
 
@@ -97,14 +159,20 @@ describe('totalLevels（§4.2 総レベル数 = 段数の積）', () => {
     expect(totalLevels(FULL)).toBe(720);
   });
 
-  it('変化順を変えても積は不変（720）', () => {
-    const order = ['rotationSpeed', 'gridSize', 'direction', 'seconds', 'count'] as const;
+  it('変化順を変えても積は不変（720・repeat は最内側固定）', () => {
+    const order: readonly VariableKey[] = [
+      'repeat',
+      'rotationSpeed',
+      'gridSize',
+      'direction',
+      'seconds',
+    ];
     expect(totalLevels(FULL, order)).toBe(720);
   });
 
   it('部分範囲では段数の積が変わる', () => {
     const ranges: VariableRanges = {
-      count: [1, 2],
+      repeat: [1, 2],
       seconds: [40, 35, 30],
       direction: ['one-way'],
       gridSize: [3, 4],
@@ -116,7 +184,7 @@ describe('totalLevels（§4.2 総レベル数 = 段数の積）', () => {
 
   it('全変数 1 値なら総レベル数 1', () => {
     const ranges: VariableRanges = {
-      count: [1],
+      repeat: [1],
       seconds: [40],
       direction: ['one-way'],
       gridSize: [3],
@@ -179,15 +247,15 @@ describe('cpdForLevel（レベル → 空間周波数 cpd 線形補間）', () =
 });
 
 // ───────────────────────────────────────────────────────────
-// §4.1 拡張全集合での梯子（v3.1）
+// §4.1 拡張全集合での梯子（v3.2）
 // ───────────────────────────────────────────────────────────
 
-describe('拡張全集合の梯子（v3.1・fullVariableRanges）', () => {
+describe('拡張全集合の梯子（v3.2・fullVariableRanges）', () => {
   const FULL_ALL = fullVariableRanges();
 
-  it('全集合 L1 = 全変数最易（個数1, 時60, 一方向, 3x3, 速7）', () => {
+  it('全集合 L1 = 全変数最易（repeat1, 時60, 一方向, 3x3, 速7）', () => {
     expect(levelToParams(1, DEFAULT_VARIABLE_ORDER, FULL_ALL)).toEqual<LevelParams>({
-      count: 1,
+      repeat: 1,
       seconds: 60,
       direction: 'one-way',
       gridSize: 3,
@@ -195,25 +263,25 @@ describe('拡張全集合の梯子（v3.1・fullVariableRanges）', () => {
     });
   });
 
-  it('全集合 L2 = 個数だけ 1 段難化（個数2）', () => {
-    expect(levelToParams(2, DEFAULT_VARIABLE_ORDER, FULL_ALL).count).toBe(2);
+  it('全集合 L2 = repeat だけ 1 段進む（repeat2）', () => {
+    expect(levelToParams(2, DEFAULT_VARIABLE_ORDER, FULL_ALL).repeat).toBe(2);
   });
 
-  it('全集合 L6→L7 で個数が最難 6 → リセットし時間 1 段難化（桁上がり）', () => {
-    // 個数全集合 6 値：L1..L6 が個数 1..6・他最易。L7 で個数 1 に戻り seconds 1 段難化。
+  it('全集合 L6→L7 で repeat が最内側最大 6 → リセットし時間 1 段難化（桁上がり）', () => {
+    // repeat 全集合 6 値：L1..L6 が repeat 1..6・他最易。L7 で repeat 1 に戻り seconds 1 段難化。
     expect(levelToParams(6, DEFAULT_VARIABLE_ORDER, FULL_ALL)).toMatchObject({
-      count: 6,
+      repeat: 6,
       seconds: 60,
     });
     expect(levelToParams(7, DEFAULT_VARIABLE_ORDER, FULL_ALL)).toMatchObject({
-      count: 1,
+      repeat: 1,
       seconds: 55,
     });
   });
 
-  it('全集合の最終レベル（6864）= 全変数最難（個数6, 時10, 振動, 6x6, 速1）', () => {
+  it('全集合の最終レベル（6864）= 全変数最難（repeat6, 時10, 振動, 6x6, 速1）', () => {
     expect(levelToParams(6864, DEFAULT_VARIABLE_ORDER, FULL_ALL)).toEqual<LevelParams>({
-      count: 6,
+      repeat: 6,
       seconds: 10,
       direction: 'oscillate',
       gridSize: 6,
@@ -234,13 +302,13 @@ describe('拡張全集合の梯子（v3.1・fullVariableRanges）', () => {
 });
 
 // ───────────────────────────────────────────────────────────
-// §4.2 levelToParams — 境界と桁上がり
+// §4.2 levelToParams — 境界と桁上がり（既定 n=4 梯子）
 // ───────────────────────────────────────────────────────────
 
 describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）', () => {
-  it('L1 = 全変数最易（個数1, 時40, 一方向, 3x3, 速6）', () => {
+  it('L1 = 全変数最易（repeat1, 時40, 一方向, 3x3, 速6）', () => {
     expect(levelToParams(1)).toEqual<LevelParams>({
-      count: 1,
+      repeat: 1,
       seconds: 40,
       direction: 'one-way',
       gridSize: 3,
@@ -248,9 +316,9 @@ describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）
     });
   });
 
-  it('L2 = 個数だけ 1 段難化（個数2, 他は最易）', () => {
+  it('L2 = repeat だけ 1 段進む（repeat2, 他は最易・難易度同一）', () => {
     expect(levelToParams(2)).toEqual<LevelParams>({
-      count: 2,
+      repeat: 2,
       seconds: 40,
       direction: 'one-way',
       gridSize: 3,
@@ -258,16 +326,16 @@ describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）
     });
   });
 
-  it('L3 = 個数3 / L4 = 個数4（最内側が進む）', () => {
-    expect(levelToParams(3).count).toBe(3);
-    expect(levelToParams(4).count).toBe(4);
+  it('L3 = repeat3 / L4 = repeat4（最内側が進む）', () => {
+    expect(levelToParams(3).repeat).toBe(3);
+    expect(levelToParams(4).repeat).toBe(4);
     expect(levelToParams(4).seconds).toBe(40);
   });
 
-  it('L4 → L5 で count 桁上がり（個数 4→1・時間 40→35）', () => {
-    expect(levelToParams(4)).toMatchObject({ count: 4, seconds: 40 });
+  it('L4 → L5 で repeat 桁上がり（repeat 4→1・時間 40→35）', () => {
+    expect(levelToParams(4)).toMatchObject({ repeat: 4, seconds: 40 });
     expect(levelToParams(5)).toMatchObject({
-      count: 1,
+      repeat: 1,
       seconds: 35,
       direction: 'one-way',
       gridSize: 3,
@@ -275,9 +343,9 @@ describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）
     });
   });
 
-  it('L20 = 個数4・時20・一方向・3x3・速6（seconds 最難・direction 桁前）', () => {
+  it('L20 = repeat4・時20・一方向・3x3・速6（seconds 最難・direction 桁前）', () => {
     expect(levelToParams(20)).toEqual<LevelParams>({
-      count: 4,
+      repeat: 4,
       seconds: 20,
       direction: 'one-way',
       gridSize: 3,
@@ -287,7 +355,7 @@ describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）
 
   it('L20 → L21 で seconds 桁上がり → direction が 1 段（振動へ）', () => {
     expect(levelToParams(21)).toEqual<LevelParams>({
-      count: 1,
+      repeat: 1,
       seconds: 40,
       direction: 'oscillate',
       gridSize: 3,
@@ -296,16 +364,16 @@ describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）
   });
 
   it('L40 → L41 で direction 桁上がり → gridSize が 1 段（4x4へ）', () => {
-    // direction は count(4)×seconds(5)=20 レベルごとに 1 段。
+    // direction は repeat(4)×seconds(5)=20 レベルごとに 1 段。
     // L21..L40 = 振動・3x3。L41 で gridSize が 4x4 へ、direction は一方向に戻る。
     expect(levelToParams(40)).toMatchObject({
-      count: 4,
+      repeat: 4,
       seconds: 20,
       direction: 'oscillate',
       gridSize: 3,
     });
     expect(levelToParams(41)).toEqual<LevelParams>({
-      count: 1,
+      repeat: 1,
       seconds: 40,
       direction: 'one-way',
       gridSize: 4,
@@ -314,16 +382,16 @@ describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）
   });
 
   it('L80 → L81 で gridSize 桁上がり → rotationSpeed が 1 段（5.5へ）', () => {
-    // count×seconds×direction×gridSize = 4×5×2×2 = 80 レベルで rotationSpeed 1 段。
+    // repeat×seconds×direction×gridSize = 4×5×2×2 = 80 レベルで rotationSpeed 1 段。
     expect(levelToParams(80)).toMatchObject({
-      count: 4,
+      repeat: 4,
       seconds: 20,
       direction: 'oscillate',
       gridSize: 4,
       rotationSpeed: 6,
     });
     expect(levelToParams(81)).toEqual<LevelParams>({
-      count: 1,
+      repeat: 1,
       seconds: 40,
       direction: 'one-way',
       gridSize: 3,
@@ -331,9 +399,9 @@ describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）
     });
   });
 
-  it('L720 = 全変数最難（個数4, 時20, 振動, 4x4, 速2）', () => {
+  it('L720 = 全変数最難（repeat4, 時20, 振動, 4x4, 速2）', () => {
     expect(levelToParams(720)).toEqual<LevelParams>({
-      count: 4,
+      repeat: 4,
       seconds: 20,
       direction: 'oscillate',
       gridSize: 4,
@@ -345,7 +413,7 @@ describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）
     const seen = new Set<string>();
     for (let l = 1; l <= 720; l++) {
       const p = levelToParams(l);
-      const key = `${p.count}|${p.seconds}|${p.direction}|${p.gridSize}|${p.rotationSpeed}`;
+      const key = `${p.repeat}|${p.seconds}|${p.direction}|${p.gridSize}|${p.rotationSpeed}`;
       expect(seen.has(key)).toBe(false);
       seen.add(key);
     }
@@ -363,7 +431,7 @@ describe('levelToParams（§4.2 デフォルト梯子・境界・桁上がり）
 describe('levelToParams（部分範囲・代替変化順）', () => {
   it('部分範囲ではその有効値集合の中で梯子が組まれる', () => {
     const ranges: VariableRanges = {
-      count: [2, 3],
+      repeat: [1, 2],
       seconds: [30, 25],
       direction: ['oscillate'],
       gridSize: [4],
@@ -372,14 +440,14 @@ describe('levelToParams（部分範囲・代替変化順）', () => {
     // 総数 2×2×1×1×2 = 8
     expect(totalLevels(ranges)).toBe(8);
     expect(levelToParams(1, DEFAULT_VARIABLE_ORDER, ranges)).toEqual<LevelParams>({
-      count: 2,
+      repeat: 1,
       seconds: 30,
       direction: 'oscillate',
       gridSize: 4,
       rotationSpeed: 3,
     });
     expect(levelToParams(8, DEFAULT_VARIABLE_ORDER, ranges)).toEqual<LevelParams>({
-      count: 3,
+      repeat: 2,
       seconds: 25,
       direction: 'oscillate',
       gridSize: 4,
@@ -387,14 +455,21 @@ describe('levelToParams（部分範囲・代替変化順）', () => {
     });
   });
 
-  it('変化順を変えると最内側変数が変わる（時間を最内側に）', () => {
-    const order = ['seconds', 'count', 'direction', 'gridSize', 'rotationSpeed'] as const;
-    // L1 は全最易、L2 は最内側 = seconds が 1 段進む。
-    expect(levelToParams(1, order)).toMatchObject({ count: 1, seconds: 40 });
-    expect(levelToParams(2, order)).toMatchObject({ count: 1, seconds: 35 });
-    // seconds は 5 値。L5=seconds最難, L6 で seconds 桁上がり → count が 1 段。
-    expect(levelToParams(5, order)).toMatchObject({ count: 1, seconds: 20 });
-    expect(levelToParams(6, order)).toMatchObject({ count: 2, seconds: 40 });
+  it('外側の変化順を変えると 2 番目以降の変数が変わる（repeat は最内側固定）', () => {
+    // repeat 最内側固定で、外側を seconds→direction... から direction→seconds... へ並べ替え。
+    const order: readonly VariableKey[] = [
+      'repeat',
+      'direction',
+      'seconds',
+      'gridSize',
+      'rotationSpeed',
+    ];
+    // L1..L4 = repeat 1..4・他最易。L5 で 2 番目（direction）が 1 段進む。
+    expect(levelToParams(4, order)).toMatchObject({ repeat: 4, direction: 'one-way' });
+    expect(levelToParams(5, order)).toMatchObject({ repeat: 1, direction: 'oscillate', seconds: 40 });
+    // direction は 2 値。L8 = repeat4/振動。L9 で direction 桁上がり → seconds 1 段。
+    expect(levelToParams(8, order)).toMatchObject({ repeat: 4, direction: 'oscillate', seconds: 40 });
+    expect(levelToParams(9, order)).toMatchObject({ repeat: 1, direction: 'one-way', seconds: 35 });
   });
 });
 
@@ -410,9 +485,9 @@ describe('paramsToLevel（levelToParams の逆変換）', () => {
   });
 
   it('代表値で逆変換が正しい', () => {
-    expect(paramsToLevel({ count: 1, seconds: 40, direction: 'one-way', gridSize: 3, rotationSpeed: 6 })).toBe(1);
-    expect(paramsToLevel({ count: 4, seconds: 20, direction: 'oscillate', gridSize: 4, rotationSpeed: 2 })).toBe(720);
-    expect(paramsToLevel({ count: 1, seconds: 40, direction: 'oscillate', gridSize: 3, rotationSpeed: 6 })).toBe(21);
+    expect(paramsToLevel({ repeat: 1, seconds: 40, direction: 'one-way', gridSize: 3, rotationSpeed: 6 })).toBe(1);
+    expect(paramsToLevel({ repeat: 4, seconds: 20, direction: 'oscillate', gridSize: 4, rotationSpeed: 2 })).toBe(720);
+    expect(paramsToLevel({ repeat: 1, seconds: 40, direction: 'oscillate', gridSize: 3, rotationSpeed: 6 })).toBe(21);
   });
 
   it('範囲外の値は RangeError', () => {
@@ -420,7 +495,7 @@ describe('paramsToLevel（levelToParams の逆変換）', () => {
     const ranges: VariableRanges = { ...FULL, gridSize: [3] };
     expect(() =>
       paramsToLevel(
-        { count: 1, seconds: 40, direction: 'one-way', gridSize: 4, rotationSpeed: 6 },
+        { repeat: 1, seconds: 40, direction: 'one-way', gridSize: 4, rotationSpeed: 6 },
         DEFAULT_VARIABLE_ORDER,
         ranges,
       ),
@@ -474,7 +549,7 @@ describe('applyResult — クリア（§4.4 / F-04）', () => {
 
   it('部分範囲の上限でクリアしてもクランプされる', () => {
     const ranges: VariableRanges = {
-      count: [1, 2],
+      repeat: [1, 2],
       seconds: [40],
       direction: ['one-way'],
       gridSize: [3],
@@ -529,13 +604,10 @@ describe('applyResult — 連続失敗シナリオ（F-04 受け入れ基準）'
   });
 
   it('連続失敗カウントは永続値（state に保持され関数間で引き継がれる）', () => {
-    // applyResult は state を読み取り次 state を返す。永続化は S3 だが、
-    // ここでは「カウントが state に正しく蓄積される」ことを確認する。
     let state: LevelState = initialLevelState();
     state = { ...state, currentLevel: 10 };
     const after1 = applyResult(state, 'fail').levelState;
     expect(after1.consecutiveFailures).toBe(1);
-    // 別の関数呼び出し（=再起動相当）でも state を渡せば 1 から続く。
     const after2 = applyResult(after1, 'fail').levelState;
     expect(after2.consecutiveFailures).toBe(0);
     expect(after2.currentLevel).toBe(9);
@@ -589,7 +661,7 @@ describe('clampLevelToRange（§4.5）', () => {
 describe('clampLevelState（§4.5 / F-13 範囲変更反映）', () => {
   it('範囲縮小で現在レベルが新上限にクランプされ連続失敗が 0 リセット', () => {
     const ranges: VariableRanges = {
-      count: [1, 2],
+      repeat: [1, 2],
       seconds: [40],
       direction: ['one-way'],
       gridSize: [3],
@@ -617,7 +689,7 @@ describe('clampLevelState（§4.5 / F-13 範囲変更反映）', () => {
 
   it('highestLevel も新上限でクランプされる', () => {
     const ranges: VariableRanges = {
-      count: [1, 2, 3, 4],
+      repeat: [1, 2, 3, 4],
       seconds: [40, 35],
       direction: ['one-way'],
       gridSize: [3],
@@ -630,6 +702,17 @@ describe('clampLevelState（§4.5 / F-13 範囲変更反映）', () => {
     );
     expect(out.highestLevel).toBe(8);
     expect(out.currentLevel).toBe(3);
+  });
+
+  it('repeat radix を n=6 に増やすと総レベル数 1080 へ（梯子拡大・現在レベル保持）', () => {
+    const ranges: VariableRanges = { ...FULL, repeat: repeatRange(6) };
+    const out = clampLevelState(
+      { currentLevel: 700, consecutiveFailures: 1, highestLevel: 650 },
+      ranges,
+    );
+    expect(totalLevels(ranges)).toBe(1080);
+    expect(out.currentLevel).toBe(700);
+    expect(out.consecutiveFailures).toBe(0);
   });
 
   it('引数 levelState を変更しない（純関数）', () => {

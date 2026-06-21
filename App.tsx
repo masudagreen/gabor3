@@ -180,6 +180,16 @@ export default function App() {
     setDarkMode(next.darkMode);
   }, []);
 
+  // チュートリアル Lv0 完了（§4.8/F-15）：tutorialCompleted を永続化（2 回目以降は非表示）。
+  const handleTutorialComplete = React.useCallback(() => {
+    setProfile((prev) => {
+      if (!prev || prev.tutorialCompleted) return prev;
+      const next: UserProfile = { ...prev, tutorialCompleted: true };
+      void saveUserProfile(next);
+      return next;
+    });
+  }, []);
+
   const showOnboarding = ready && profile !== null && !profile.onboardingCompleted;
 
   return (
@@ -207,6 +217,9 @@ export default function App() {
               hapticsEnabled={settings.hapticsEnabled}
               ranges={settings.variableRanges}
               order={settings.variableOrder}
+              countRange={settings.countRange}
+              showTutorial={!profile.tutorialCompleted}
+              onTutorialComplete={handleTutorialComplete}
               initialLevel={levelState}
               initialHomePhase="distance"
               onResolveRound={handleResolveRound}

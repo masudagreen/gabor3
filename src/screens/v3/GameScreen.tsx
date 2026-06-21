@@ -27,7 +27,12 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { spacing } from '../../theme/tokens';
 import type { ViewingDistanceCm } from '../../lib/calibration';
 import type { GameConfig, GameEvent, GameState } from '../../lib/v3/gameMachine';
-import { deriveReveal, gameReducer, initGame } from '../../lib/v3/gameMachine';
+import {
+  deriveReveal,
+  gameReducer,
+  initGame,
+  countRotatingPatches,
+} from '../../lib/v3/gameMachine';
 import type { GameResult } from '../../lib/v3/level';
 import { Rng } from '../../lib/v2/rng';
 import type { FeedbackEventV3 } from '../../lib/v3/feedback';
@@ -137,13 +142,23 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     onPlayingChangeRef.current?.(playing);
   }, [playing]);
 
-  // ゲーム開始時に aria-live(assertive) でレベル・個数を読み上げる（F-02 / NF-10）。
+  // この格子で回転しているパッチ数（v3.2：個数はレベルでなく生成時に決まる）。
+  const rotatingCount = React.useMemo(
+    () => countRotatingPatches(state.patches),
+    [state.patches],
+  );
+  // 個数を明示するか（チュートリアル=true / 本番=false「全て探せ」、§4.8/§4.9）。
+  const showCount = config.showCount ?? false;
+
+  // ゲーム開始時に aria-live(assertive) でレベル・教示を読み上げる（F-02 / NF-10）。
   React.useEffect(() => {
     announceForA11y(
-      t('gameV3.start_announce', {
-        level: config.level,
-        count: config.params.count,
-      }),
+      showCount
+        ? t('gameV3.start_announce', {
+            level: config.level,
+            count: rotatingCount,
+          })
+        : t('gameV3.start_announce_all', { level: config.level }),
     );
     // 開始時 1 度だけ
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -290,10 +305,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({
             </>
           ) : null}
         </View>
-        {/* 「◯個探せ！」はパッチの下に表示（ユーザー要望）。 */}
+        {/* 教示はパッチの下に表示。本番「全て探せ」／チュートリアル「◯個探せ」（§4.8/§4.9）。 */}
         <View style={styles.bottomArea}>
           <CountBanner
-            count={config.params.count}
+            count={rotatingCount}
+            showCount={showCount}
             testId={testId ? `${testId}-count` : undefined}
           />
         </View>

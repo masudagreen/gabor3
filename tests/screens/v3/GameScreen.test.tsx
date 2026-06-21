@@ -18,7 +18,7 @@ import { isChanging } from '../../../src/lib/v3/patch';
 import { levelToParams } from '../../../src/lib/v3/level';
 import { mulberry32 } from '../../../src/lib/v2/rng';
 
-/** L で個数 count・gridSize・seconds を決める config を作る。 */
+/** L で gridSize・seconds 等の難易度変数を決める config を作る（個数はレベル外・§4.9）。 */
 function configForLevel(level: number): GameConfig {
   return { level, params: levelToParams(level) };
 }
@@ -56,20 +56,22 @@ function renderGame(
 }
 
 describe('GameScreen v3 共通描画（F-01/F-02/F-12）', () => {
-  it('上部バーにカウントダウン・X・レベル番号、個数案内、格子を描画する', () => {
-    // L7（デフォルト梯子：個数3・時間30・一方向・3x3・速度6）
+  it('上部バーにカウントダウン・X・レベル番号、本番「全て探せ」教示、格子を描画する', () => {
+    // L7（デフォルト梯子：repeat3・時間30・一方向・3x3・速度6）。本番は個数非表示（§4.9）。
     const config = configForLevel(7);
     renderGame({ config, rng: mulberry32(1) });
     expect(screen.getByLabelText('ゲームを中断')).toBeTruthy();
     expect(screen.getByLabelText(/残り \d+ 秒/)).toBeTruthy();
     expect(screen.getByLabelText('レベル 7')).toBeTruthy();
-    expect(screen.getByText(`${config.params.count} 個探せ！`)).toBeTruthy();
+    // v3.2：本番は個数を出さず「回転しているものを全て探せ」（find_all・ja）。
+    expect(screen.getByText('回転しているものを全て探せ')).toBeTruthy();
   });
 
-  it('レベル番号と個数は config 由来で固定（F-02）', () => {
+  it('本番教示は「回転しているパッチをすべて探してください」を読み上げる（個数非開示・F-02）', () => {
     const config = configForLevel(41); // 振動域
     renderGame({ config, rng: mulberry32(2) });
     expect(screen.getByLabelText('レベル 41')).toBeTruthy();
+    expect(screen.getByLabelText('回転しているパッチをすべて探してください')).toBeTruthy();
   });
 });
 

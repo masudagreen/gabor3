@@ -19,7 +19,13 @@
  */
 
 import { PatchDef, isChanging } from './patch';
-import { generateRoundFromLevel } from './roundGen';
+import {
+  generateRound,
+  generateRoundFromLevel,
+  levelParamsToRoundGen,
+  DEFAULT_COUNT_RANGE,
+  type CountRangePreset,
+} from './roundGen';
 import type { LevelParams, GameResult } from './level';
 import { Rng } from '../v2/rng';
 
@@ -28,12 +34,27 @@ export type GamePhase =
   | 'playing' // 試行中（選択トグル可、正誤フィードバックなし）
   | 'revealed'; // 締め切り済み・結果開示中（タップ無効）
 
-/** ゲームの構成（現在レベルとその 5 変数）。 */
+/** ゲームの構成（現在レベルとその難易度変数）。 */
 export type GameConfig = {
-  /** 挑戦レベル番号（表示・記録用）。 */
+  /** 挑戦レベル番号（表示・記録用）。チュートリアルは 0。 */
   level: number;
-  /** そのレベルの 5 変数の実値（levelToParams の結果）。 */
+  /** そのレベルの難易度変数の実値（levelToParams の結果）。 */
   params: LevelParams;
+  /**
+   * 【v3.2】本番の回転個数ランダム範囲プリセット（spec §4.9・AS-36）。
+   * 未指定は既定。`fixedCount` が指定されている場合は無視される。
+   */
+  countRange?: CountRangePreset;
+  /**
+   * 【v3.2】回転個数を明示的に固定する（チュートリアル Lv0 用、spec §4.8）。
+   * 指定時は countRange のランダム抽選より優先し、この個数で生成する（格子容量でクランプ）。
+   */
+  fixedCount?: number;
+  /**
+   * 【v3.2】個数を画面に明示するか（spec §4.8/§4.9）。
+   * チュートリアル（Lv0）= true（「◯個探せ」）、本番 = false（「全て探せ」）。既定 false。
+   */
+  showCount?: boolean;
 };
 
 /** ゲーム状態（1 ゲーム = 1 レベル挑戦）。 */
@@ -78,12 +99,30 @@ export function isAllCorrect(
   return changingCount > 0;
 }
 
-/** ゲーム開始（格子を生成し playing フェーズへ）。 */
+/** 回転（変化）パッチの個数を数える（表示・読み上げ用、v3.2）。 */
+export function countRotatingPatches(patches: readonly PatchDef[]): number {
+  let n = 0;
+  for (const patch of patches) if (isChanging(patch)) n++;
+  return n;
+}
+
+/**
+ * ゲーム開始（格子を生成し playing フェーズへ）。
+ * v3.2：個数は `fixedCount`（チュートリアル）優先、なければ `countRange` からランダム抽選（§4.9）。
+ */
 export function initGame(config: GameConfig, rng: Rng): GameState {
+  const patches =
+    config.fixedCount != null
+      ? generateRound(rng, levelParamsToRoundGen(config.params, config.fixedCount))
+      : generateRoundFromLevel(
+          rng,
+          config.params,
+          config.countRange ?? DEFAULT_COUNT_RANGE,
+        );
   return {
     config,
     phase: 'playing',
-    patches: generateRoundFromLevel(rng, config.params),
+    patches,
     selected: new Set<number>(),
     result: null,
   };

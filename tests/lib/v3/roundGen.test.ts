@@ -1,12 +1,17 @@
 /**
- * roundGen.test.ts — v3.0 ラウンド生成の単体テスト（spec F-01 / §4.1 / system §7.2）。
+ * roundGen.test.ts — v3.2 ラウンド生成の単体テスト（spec F-01 / §4.9 / system §7.2）。
+ *
+ * v3.2 改訂：
+ * - **個数は難易度軸でなくなった**。各ラウンドの回転個数は `countRange` プリセット
+ *   × 格子サイズの範囲からランダム抽選する（pickRoundCount / countRangeBounds）。
+ * - `generateRound` 自体は依然「count 個ちょうど」を配置する純関数（count は外部から渡る）。
+ * - `levelParamsToRoundGen(params, count)` は第 2 引数 count を取る。
+ * - `generateRoundFromLevel(rng, params, countRange)` は countRange から個数を抽選する。
  *
  * 検証範囲：
- * - 個数はレベルで確定（count 個ちょうどが回転、ランダム抽選なし）。
- * - 格子サイズ n×n のセル数。
- * - 回転パッチは全て同じ rotationSpeed / direction（一方向/振動）。
- * - 静止パッチは時間変化なし・互いに離れた初期角度。
- * - rng 注入で決定論（同シードで同結果）。
+ * - countRangeBounds（3 プリセット × 格子サイズ）と pickRoundCount の範囲・決定論。
+ * - generateRound：count 個ちょうど・過密回避・速度/方向・静止角度。
+ * - levelParamsToRoundGen / generateRoundFromLevel の v3.2 シグネチャ。
  */
 
 import {
@@ -15,8 +20,13 @@ import {
   levelParamsToRoundGen,
   generateSpacedAngles,
   clampCountToGrid,
+  countRangeBounds,
+  pickRoundCount,
+  COUNT_RANGE_PRESETS,
+  DEFAULT_COUNT_RANGE,
   STATIC_MIN_ANGLE_GAP_DEG,
   type RoundGenParams,
+  type CountRangePreset,
 } from '../../../src/lib/v3/roundGen';
 import { isChanging } from '../../../src/lib/v3/patch';
 import { mulberry32 } from '../../../src/lib/v2/rng';
@@ -32,7 +42,101 @@ function params(over: Partial<RoundGenParams> = {}): RoundGenParams {
   };
 }
 
-describe('generateRound — 個数固定（v2 のランダム抽選を廃止）', () => {
+// ───────────────────────────────────────────────────────────
+// §4.9 個数範囲プリセット（countRange）
+// ───────────────────────────────────────────────────────────
+
+describe('COUNT_RANGE_PRESETS / DEFAULT_COUNT_RANGE（§4.9・AS-36）', () => {
+  it('3 プリセット（cells_minus_1 / half / fixed_1_4）', () => {
+    expect(COUNT_RANGE_PRESETS).toEqual(['cells_minus_1', 'half', 'fixed_1_4']);
+  });
+
+  it('既定プリセットは中庸の half', () => {
+    expect(DEFAULT_COUNT_RANGE).toBe('half');
+  });
+});
+
+describe('countRangeBounds（プリセット × 格子サイズ → [min,max]・§4.9）', () => {
+  it('min は常に 1', () => {
+    for (const preset of COUNT_RANGE_PRESETS) {
+      for (const gridSize of [3, 4, 5, 6]) {
+        expect(countRangeBounds(preset, gridSize).min).toBe(1);
+      }
+    }
+  });
+
+  it('cells_minus_1 → max = セル数−1（静止 1 つ残る）', () => {
+    expect(countRangeBounds('cells_minus_1', 3)).toEqual({ min: 1, max: 8 }); // 9-1
+    expect(countRangeBounds('cells_minus_1', 4)).toEqual({ min: 1, max: 15 }); // 16-1
+    expect(countRangeBounds('cells_minus_1', 6)).toEqual({ min: 1, max: 35 }); // 36-1
+  });
+
+  it('half → max = floor(セル数/2)', () => {
+    expect(countRangeBounds('half', 3)).toEqual({ min: 1, max: 4 }); // floor(9/2)
+    expect(countRangeBounds('half', 4)).toEqual({ min: 1, max: 8 }); // floor(16/2)
+    expect(countRangeBounds('half', 5)).toEqual({ min: 1, max: 12 }); // floor(25/2)
+    expect(countRangeBounds('half', 6)).toEqual({ min: 1, max: 18 }); // floor(36/2)
+  });
+
+  it('fixed_1_4 → max = 4（サイズ非依存・ただし格子容量でクランプ）', () => {
+    expect(countRangeBounds('fixed_1_4', 3)).toEqual({ min: 1, max: 4 });
+    expect(countRangeBounds('fixed_1_4', 4)).toEqual({ min: 1, max: 4 });
+    expect(countRangeBounds('fixed_1_4', 6)).toEqual({ min: 1, max: 4 });
+  });
+
+  it('max は常に セル数−1 以下にクランプ（静止 1 つ以上保証）', () => {
+    for (const preset of COUNT_RANGE_PRESETS) {
+      for (const gridSize of [3, 4, 5, 6]) {
+        const { max } = countRangeBounds(preset, gridSize);
+        expect(max).toBeLessThanOrEqual(gridSize * gridSize - 1);
+        expect(max).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+});
+
+describe('pickRoundCount（範囲内の一様抽選・§4.9）', () => {
+  it('抽選値は常に [min, max] 内（決定論シードでの統計確認）', () => {
+    for (const preset of COUNT_RANGE_PRESETS) {
+      for (const gridSize of [3, 4, 5, 6]) {
+        const { min, max } = countRangeBounds(preset, gridSize);
+        const rng = mulberry32(gridSize * 13 + preset.length);
+        for (let i = 0; i < 200; i++) {
+          const c = pickRoundCount(rng, preset, gridSize);
+          expect(c).toBeGreaterThanOrEqual(min);
+          expect(c).toBeLessThanOrEqual(max);
+        }
+      }
+    }
+  });
+
+  it('同シードで決定論（同じ抽選列）', () => {
+    const a = mulberry32(7);
+    const b = mulberry32(7);
+    for (let i = 0; i < 20; i++) {
+      expect(pickRoundCount(a, 'half', 4)).toBe(pickRoundCount(b, 'half', 4));
+    }
+  });
+
+  it('範囲が複数値のとき複数の異なる個数が出る（ランダム性）', () => {
+    const rng = mulberry32(20240601);
+    const seen = new Set<number>();
+    for (let i = 0; i < 200; i++) {
+      seen.add(pickRoundCount(rng, 'cells_minus_1', 4)); // max=15
+    }
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it('抽選個数は格子容量でクランプされ静止 1 つ以上残す', () => {
+    const rng = mulberry32(3);
+    for (let i = 0; i < 100; i++) {
+      const c = pickRoundCount(rng, 'cells_minus_1', 3); // 3x3=9 セル
+      expect(c).toBeLessThanOrEqual(8);
+    }
+  });
+});
+
+describe('generateRound — 個数固定（外部から渡された count 個ちょうど）', () => {
   it('count 個ちょうどが回転、残りが静止', () => {
     for (const count of [1, 2, 3, 4]) {
       const patches = generateRound(mulberry32(count), params({ count, gridSize: 3 }));
@@ -49,8 +153,7 @@ describe('generateRound — 個数固定（v2 のランダム抽選を廃止）'
     expect(patches.filter(isChanging)).toHaveLength(4);
   });
 
-  it('count を変えると回転個数だけが変わる（抽選由来のばらつきがない）', () => {
-    // 同シードでも count を変えれば回転個数は count に一致する（決定的）。
+  it('count を変えると回転個数だけが変わる（決定的）', () => {
     const a = generateRound(mulberry32(42), params({ count: 1 }));
     const b = generateRound(mulberry32(42), params({ count: 3 }));
     expect(a.filter(isChanging)).toHaveLength(1);
@@ -102,7 +205,6 @@ describe('generateRound — 個数×サイズの過密回避（§4.7）', () => 
   });
 
   it('個数が格子容量を超える極端ケースでも静止パッチが最低 1 つ残る', () => {
-    // gridSize 3（9 セル）に count 9 を渡しても 8 にクランプされ静止 1 つ残る。
     const patches = generateRound(mulberry32(2), params({ count: 9, gridSize: 3 }));
     expect(patches.filter(isChanging)).toHaveLength(8);
     expect(patches.filter((p) => !isChanging(p))).toHaveLength(1);
@@ -129,7 +231,6 @@ describe('generateRound — 回転パッチの速度・方向', () => {
       params({ count: 4, gridSize: 3, direction: 'one-way' }),
     );
     const dirs = patches.filter(isChanging).map((p) => p.rotationDir);
-    // 各々 'cw' か 'ccw' のいずれか（妥当な値）。
     for (const d of dirs) {
       expect(['cw', 'ccw']).toContain(d);
     }
@@ -146,14 +247,12 @@ describe('generateRound — 静止パッチ', () => {
   });
 
   it('全パッチの初期角度は [0,180) で互いに離れている（少数なら 12° 以上）', () => {
-    // 3x3・count=1 → 全 9 パッチに spacedAngles を割当（slot=20°）。
     const patches = generateRound(mulberry32(11), params({ count: 1, gridSize: 3 }));
     const angles = patches.map((p) => p.initialOrientationDeg).sort((a, b) => a - b);
     for (const a of angles) {
       expect(a).toBeGreaterThanOrEqual(0);
       expect(a).toBeLessThan(180);
     }
-    // 9 個等分の slot=20° ≥ 12°：隣接差が 12° 以上
     for (let i = 1; i < angles.length; i++) {
       expect(angles[i] - angles[i - 1]).toBeGreaterThanOrEqual(STATIC_MIN_ANGLE_GAP_DEG - 1e-6);
     }
@@ -195,30 +294,71 @@ describe('rng 注入で決定論', () => {
   });
 });
 
-describe('levelParamsToRoundGen / generateRoundFromLevel', () => {
-  it('LevelParams から RoundGenParams を抽出する', () => {
-    const lp = levelToParams(1); // L1 = 全変数最易：count1/sec40/one-way/3x3/速6
-    const rg = levelParamsToRoundGen(lp);
+describe('levelParamsToRoundGen（v3.2：第 2 引数 count）', () => {
+  it('LevelParams ＋ 抽選済み count から RoundGenParams を作る', () => {
+    const lp = levelToParams(1); // L1 = 全変数最易：repeat1/sec40/one-way/3x3/速6
+    const rg = levelParamsToRoundGen(lp, 3);
     expect(rg).toEqual({
       gridSize: 3,
-      count: 1,
+      count: 3,
       rotationSpeed: 6,
       direction: 'one-way',
     });
   });
 
-  it('generateRoundFromLevel が L1 で 3x3・回転 1 個を生成', () => {
+  it('count は呼び出し側が渡した値がそのまま入る（個数はレベル外）', () => {
+    const lp = levelToParams(1);
+    expect(levelParamsToRoundGen(lp, 1).count).toBe(1);
+    expect(levelParamsToRoundGen(lp, 5).count).toBe(5);
+  });
+});
+
+describe('generateRoundFromLevel（v3.2：countRange から個数抽選）', () => {
+  it('既定 countRange で L1（3x3）を生成・回転個数は [1,4] 内（half）', () => {
     const patches = generateRoundFromLevel(mulberry32(1), levelToParams(1));
     expect(patches).toHaveLength(9);
-    expect(patches.filter(isChanging)).toHaveLength(1);
+    const changing = patches.filter(isChanging).length;
+    expect(changing).toBeGreaterThanOrEqual(1);
+    expect(changing).toBeLessThanOrEqual(4); // half × 3x3 = floor(9/2)
   });
 
-  it('振動レベル（L21=振動・3x3・count1）で direction=oscillate を生成', () => {
-    const lp = levelToParams(21); // L21 = 個数1, 時40, 振動, 3x3, 速6（spec §4.2 例）
+  it('countRange を渡すとその範囲から抽選される（fixed_1_4 → 最大 4）', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const patches = generateRoundFromLevel(
+        mulberry32(seed),
+        levelToParams(1),
+        'fixed_1_4',
+      );
+      const changing = patches.filter(isChanging).length;
+      expect(changing).toBeGreaterThanOrEqual(1);
+      expect(changing).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it('cells_minus_1 では 4x4 で 4 を超える個数も出うる（個数がレベル非依存）', () => {
+    const counts = new Set<number>();
+    for (let seed = 1; seed <= 100; seed++) {
+      const lp = levelToParams(41); // 4x4 を含むレベル
+      expect(lp.gridSize).toBe(4);
+      const patches = generateRoundFromLevel(mulberry32(seed), lp, 'cells_minus_1');
+      counts.add(patches.filter(isChanging).length);
+    }
+    // 4x4・cells_minus_1 → [1,15]。少なくとも 1 つは 5 以上が出る。
+    expect([...counts].some((c) => c >= 5)).toBe(true);
+  });
+
+  it('振動レベル（L21=振動・3x3）で direction=oscillate を生成', () => {
+    const lp = levelToParams(21); // L21 = repeat1, 時40, 振動, 3x3, 速6
     expect(lp.direction).toBe('oscillate');
     const patches = generateRoundFromLevel(mulberry32(3), lp);
     const changing = patches.filter(isChanging);
-    expect(changing).toHaveLength(1);
-    expect(changing[0].direction).toBe('oscillate');
+    expect(changing.length).toBeGreaterThanOrEqual(1);
+    for (const c of changing) expect(c.direction).toBe('oscillate');
+  });
+
+  it('同シード・同 countRange で決定論', () => {
+    const a = generateRoundFromLevel(mulberry32(9), levelToParams(1), 'half');
+    const b = generateRoundFromLevel(mulberry32(9), levelToParams(1), 'half');
+    expect(a).toEqual(b);
   });
 });

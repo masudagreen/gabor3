@@ -24,8 +24,8 @@ describe('v3 名前空間・スキーマバージョン', () => {
   it('プレフィックスは gaboreye:v3:', () => {
     expect(V3_PREFIX).toBe('gaboreye:v3:');
   });
-  it('schemaVersion は 3.1.0（v3.1 再凍結）', () => {
-    expect(SCHEMA_VERSION).toBe('3.1.0');
+  it('schemaVersion は 3.2.0（v3.2 再凍結）', () => {
+    expect(SCHEMA_VERSION).toBe('3.2.0');
   });
   it('消去対象の旧名前空間に v1/v1.1/v1.2/v2 を含む（v2 追加 F-11）', () => {
     expect(LEGACY_PREFIXES).toEqual([
@@ -38,13 +38,15 @@ describe('v3 名前空間・スキーマバージョン', () => {
 });
 
 describe('既定 Settings（§7.2）', () => {
-  it('フィールドは §7.2 の 7 種のみ（v3.1：sessionMinutes 追加・スコア系/手動スライダー系を含まない）', () => {
+  it('フィールドは §7.2 の 9 種のみ（v3.2：repeatCount/countRange 追加・スコア系/手動スライダー系を含まない）', () => {
     const s = defaultSettings();
     expect(Object.keys(s).sort()).toEqual(
       [
+        'countRange',
         'darkMode',
         'hapticsEnabled',
         'oneEyeGuidance',
+        'repeatCount',
         'sessionMinutes',
         'soundEnabled',
         'variableOrder',
@@ -54,6 +56,10 @@ describe('既定 Settings（§7.2）', () => {
   });
   it('sessionMinutes 既定は 5（§7.2 / AS-23）', () => {
     expect(defaultSettings().sessionMinutes).toBe(5);
+  });
+  it('repeatCount 既定は 4・countRange 既定は half（§4.9 / AS-37）', () => {
+    expect(defaultSettings().repeatCount).toBe(4);
+    expect(defaultSettings().countRange).toBe('half');
   });
   it('v2 廃止フィールドを持たない', () => {
     const s = defaultSettings() as Record<string, unknown>;
@@ -72,7 +78,7 @@ describe('既定 Settings（§7.2）', () => {
   });
   it('範囲はフル・変化順はデフォルト・継承項目は既定', () => {
     const s = defaultSettings();
-    expect(s.variableRanges.count).toEqual([1, 2, 3, 4]);
+    expect(s.variableRanges.repeat).toEqual([1, 2, 3, 4]);
     expect(s.variableRanges.seconds).toEqual([40, 35, 30, 25, 20]);
     expect(s.variableRanges.direction).toEqual(['one-way', 'oscillate']);
     expect(s.variableRanges.gridSize).toEqual([3, 4]);
@@ -88,13 +94,14 @@ describe('既定 Settings（§7.2）', () => {
 });
 
 describe('既定 UserProfile / Streak / PlayStats / BadgeStatus（§7.1/§7.6/§7.7/§7.8）', () => {
-  it('UserProfile は §7.1 準拠（schemaVersion 3.1.0・既定距離 40）', () => {
+  it('UserProfile は §7.1 準拠（schemaVersion 3.2.0・既定距離 40・tutorialCompleted=false）', () => {
     const p = defaultUserProfile('2026-06-10T00:00:00.000Z', 'iphone');
     expect(p.onboardingCompleted).toBe(false);
+    expect(p.tutorialCompleted).toBe(false);
     expect(p.disclaimerAgreedAt).toBeNull();
     expect(p.ageGroup).toBe('unspecified');
     expect(p.viewingDistanceCm).toBe(40);
-    expect(p.schemaVersion).toBe('3.1.0');
+    expect(p.schemaVersion).toBe('3.2.0');
   });
   it('Streak 既定', () => {
     expect(defaultStreak()).toEqual({

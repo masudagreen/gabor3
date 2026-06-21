@@ -19,7 +19,7 @@ import {
 import type { LevelParams } from '../../../src/lib/v3/level';
 
 const EASY: LevelParams = {
-  count: 2,
+  repeat: 2,
   seconds: 35,
   direction: 'one-way',
   gridSize: 3,
@@ -146,7 +146,7 @@ describe('recordCompletedSession — バッジ付与（§6.4 配線）', () => {
     const res = await recordCompletedSession(
       input({
         clearedLevelParams: [
-          { count: 1, seconds: 40, direction: 'oscillate', gridSize: 3, rotationSpeed: 6 },
+          { repeat: 1, seconds: 40, direction: 'oscillate', gridSize: 3, rotationSpeed: 6 },
         ],
         highestLevel: 5,
       }),

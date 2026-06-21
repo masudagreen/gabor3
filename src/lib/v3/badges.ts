@@ -20,7 +20,6 @@ import type { GameResult, LevelParams } from './level';
 import {
   STREAK_THRESHOLDS,
   SLOW_ROTATION_MAX,
-  MASTER_MIN_COUNT,
   MASTER_MIN_GRID_SIZE,
   MASTER_MAX_ROTATION_SPEED,
   HIGH_LEVEL_ABSOLUTE,
@@ -55,10 +54,12 @@ export type EvaluateBadgesResult = {
   newlyEarned: BadgeId[];
 };
 
-/** B-08「達人の眼」の最難域条件をクリアしたレベルが満たすか（spec §6.2 / system §9.3）。 */
+/**
+ * B-08「達人の眼」の最難域条件をクリアしたレベルが満たすか（spec §6.2 / system §9.3）。
+ * v3.2：個数は難易度軸でなくなったため、サイズ・方向・回転速度の最難域で判定する。
+ */
 export function isMasterLevel(params: LevelParams): boolean {
   return (
-    params.count >= MASTER_MIN_COUNT &&
     params.gridSize >= MASTER_MIN_GRID_SIZE &&
     params.direction === 'oscillate' &&
     params.rotationSpeed <= MASTER_MAX_ROTATION_SPEED

@@ -230,14 +230,19 @@ export const ja = {
   gameV3: {
     level: 'レベル {{n}}',
     level_label: 'レベル {{n}}',
-    count_find_n: '{{n}} 個探せ！',
+    count_find_n: '回転しているものを{{n}}つ探せ',
     count_label: '{{n}} 個の回転を探してください',
+    // v3.2：本番の教示（個数非表示・全て探せ、§4.9/AS-36）。
+    find_all: '回転しているものを全て探せ',
+    find_all_label: '回転しているパッチをすべて探してください',
     grid_label: '回転しているパッチをすべて選んでください',
     patch_label: 'パッチ {{row}}-{{col}}',
     abort_label: 'ゲームを中断',
     countdown_remaining: '残り {{n}} 秒',
     // ゲーム開始時 aria-live（assertive）。レベル・個数を読み上げ（spec a11y）。
     start_announce: 'レベル {{level}}。{{count}} 個の回転を探してください',
+    // v3.2：本番開始時の読み上げ（個数非表示）。
+    start_announce_all: 'レベル {{level}}。回転しているパッチをすべて探してください',
     // v3.1：セッション残り時間（GB-1 左、控えめ・段階色なし、system §16.2）。
     session_remaining_label: 'セッション残り時間',
     // v3.1：「あと」表記は付けず mm:ss のみ（ユーザー要望）。
@@ -363,6 +368,18 @@ export const ja = {
     session_minutes_hint: 'プレイ全体の長さです。難易度には影響しません',
     session_minutes_dec: '1 分減らす',
     session_minutes_inc: '1 分増やす',
+    // ── 繰り返し回数（v3.2：repeatCount、SR-1b、F-13/AS-37）──
+    repeat_count: '繰り返し回数',
+    repeat_count_value: '{{n}}回',
+    repeat_count_hint: '同じ難易度を何回くり返すか。総レベル数 = 回数×180',
+    repeat_count_dec: '1 回減らす',
+    repeat_count_inc: '1 回増やす',
+    // ── 個数の範囲プリセット（v3.2：countRange、SR-1c、F-13/AS-36）──
+    count_range: '個数の範囲',
+    count_range_hint: '1 ラウンドで回転する数のランダム範囲です',
+    count_range_cells_minus_1: '広い（最大まで）',
+    count_range_half: 'ひかえめ（半分まで）',
+    count_range_fixed_1_4: '少なめ（1〜4）',
     // ── 各変数の範囲（テスト用） ──
     group_ranges: '各変数の範囲（テスト用）',
     total_levels: '現在の設定：{{n}} レベル',
@@ -388,6 +405,7 @@ export const ja = {
     order_moved: '{{name}}を {{pos}} 番目に移動しました',
     order_reset: 'デフォルトに戻す',
     var_count: '個数',
+    var_repeat: '繰り返し',
     var_seconds: '時間',
     var_direction: '回転方向',
     var_gridSize: 'サイズ',

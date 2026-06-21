@@ -17,8 +17,13 @@ import {
   VALUE_SETS,
   DEFAULT_VALUE_SETS,
   DEFAULT_VARIABLE_ORDER,
+  OUTER_VARIABLE_KEYS,
   defaultVariableRanges,
   fullVariableRanges,
+  repeatRange,
+  DEFAULT_REPEAT_COUNT,
+  MIN_REPEAT_COUNT,
+  MAX_REPEAT_COUNT,
   type VariableKey,
   type VariableRanges,
   type Direction,
@@ -27,9 +32,19 @@ import {
   type LevelState,
   type GameResult,
 } from '../../lib/v3/level';
+import {
+  DEFAULT_COUNT_RANGE,
+  COUNT_RANGE_PRESETS,
+  type CountRangePreset,
+} from '../../lib/v3/roundGen';
 
-export const SCHEMA_VERSION = '3.1.0' as const;
-export const APP_VERSION = '3.1.0' as const;
+export const SCHEMA_VERSION = '3.2.0' as const;
+export const APP_VERSION = '3.2.0' as const;
+
+/** 繰り返し回数 n の値域（spec §4.1/AS-37、1〜6、既定 4）。 */
+export const REPEAT_COUNT_MIN = MIN_REPEAT_COUNT;
+export const REPEAT_COUNT_MAX = MAX_REPEAT_COUNT;
+export const DEFAULT_REPEAT_COUNT_VALUE = DEFAULT_REPEAT_COUNT;
 
 /** セッション時間（分）の値域（spec §7.2 / AS-23、1〜15、既定 5）。 */
 export const SESSION_MINUTES_MIN = 1 as const;
@@ -113,8 +128,12 @@ export {
   VALUE_SETS,
   DEFAULT_VALUE_SETS,
   DEFAULT_VARIABLE_ORDER,
+  OUTER_VARIABLE_KEYS,
   defaultVariableRanges,
   fullVariableRanges,
+  repeatRange,
+  DEFAULT_COUNT_RANGE,
+  COUNT_RANGE_PRESETS,
 };
 export type {
   VariableKey,
@@ -124,6 +143,7 @@ export type {
   LevelParams,
   LevelState,
   GameResult,
+  CountRangePreset,
 };
 
 // ---------------------------------------------------------------------------
@@ -132,6 +152,8 @@ export type {
 
 export type UserProfile = {
   onboardingCompleted: boolean;
+  /** 【v3.2 追加】チュートリアル Lv0 完了フラグ。初回プレイで完了したら true（AS-32）。 */
+  tutorialCompleted: boolean;
   /** 免責同意日時（ISO 文字列）。未同意は null。 */
   disclaimerAgreedAt: string | null;
   ageGroup: AgeGroup;
@@ -152,9 +174,25 @@ export type Settings = {
    * レベル変数ではない全プレイ共通設定（梯子・総レベル数に影響しない）。
    */
   sessionMinutes: number;
-  /** 各変数の有効値部分集合（振れ幅、テスト用）。各要素は §4.1 拡張後の全集合の部分集合。 */
+  /**
+   * 【v3.2 追加】繰り返し回数 n（1〜6・既定 4、AS-37）。最内側オドメータの radix。
+   * 総レベル数 = n×180。`variableRanges.repeat` はこの値から [1..n] に同期される。
+   */
+  repeatCount: number;
+  /**
+   * 【v3.2 追加】本番ラウンドの回転個数のランダム範囲プリセット（§4.9・AS-36）。
+   * 'cells_minus_1' | 'half' | 'fixed_1_4'。
+   */
+  countRange: CountRangePreset;
+  /**
+   * 各変数の有効値部分集合（振れ幅、テスト用）。各要素は §4.1 拡張後の全集合の部分集合。
+   * v3.2：`repeat`（最内側・[1..repeatCount] に同期）＋外側 4 変数。個数（count）は含まない。
+   */
   variableRanges: VariableRanges;
-  /** 変化順（最内側 → 最外側）。デフォルト ['count','seconds','direction','gridSize','rotationSpeed']。 */
+  /**
+   * 変化順（最内側 → 最外側）。v3.2 デフォルト ['repeat','seconds','direction','gridSize','rotationSpeed']。
+   * `repeat` は常に最内側固定（組み替え対象は外側 4 変数のみ、§4.2）。
+   */
   variableOrder: VariableKey[];
   darkMode: DarkMode;
   soundEnabled: boolean;
@@ -277,7 +315,10 @@ export function defaultSettings(): Settings {
   return {
     // 既定セッション時間 5 分（spec §7.2 / AS-23）。
     sessionMinutes: DEFAULT_SESSION_MINUTES,
-    // 既定の有効集合（v3.0 同一、追加値 OFF。総レベル数 720。AS-27）。
+    // 既定の繰り返し回数 n=4・個数範囲プリセット（spec §4.9/AS-37）。
+    repeatCount: DEFAULT_REPEAT_COUNT,
+    countRange: DEFAULT_COUNT_RANGE,
+    // 既定の有効集合（外側 v3.0 同一・repeat=[1..4]、追加値 OFF。総レベル数 720。AS-27/AS-37）。
     variableRanges: defaultVariableRanges(),
     variableOrder: [...DEFAULT_VARIABLE_ORDER],
     darkMode: 'system',
@@ -293,6 +334,7 @@ export function defaultUserProfile(
 ): UserProfile {
   return {
     onboardingCompleted: false,
+    tutorialCompleted: false,
     disclaimerAgreedAt: null,
     ageGroup: 'unspecified',
     viewingDistanceCm: 40,

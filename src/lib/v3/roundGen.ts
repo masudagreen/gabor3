@@ -1,9 +1,10 @@
 /**
- * roundGen.ts — v3.0 ラウンド（n×n 格子）生成（spec F-01 / §4.1 / system §7.2）。
+ * roundGen.ts — v3 ラウンド（n×n 格子）生成（spec F-01 / §4.9 / system §7.2）。
  *
- * v3.0 の v2 からの本質的変更：
- * - **変化パッチ個数はレベルで確定**（`count`）。v2 の「個数ランダム抽選・少なめ寄り減衰」は
- *   廃止（spec §0：個数はレベルが決め、画面に明示する F-02）。
+ * v3.2 の本質的変更：
+ * - **個数は難易度軸ではなくなった**。各ラウンドで回転パッチ数を `countRange`
+ *   プリセットの範囲から**ランダム抽選**する（spec §4.9・AS-36、教示は「全て探せ」F-02）。
+ *   v3.0〜v3.1 の「個数はレベルで確定」は廃止。
  * - 回転速度・方向（一方向/振動）はレベル値（全回転パッチ共通）。
  * - 空間周波数変化は廃止（cpd 固定）。
  *
@@ -15,11 +16,29 @@ import { PatchDef, RotationDir } from './patch';
 import type { LevelParams, Direction } from './level';
 import { Rng, randFloat, sampleWithoutReplacement } from '../v2/rng';
 
-/** 生成パラメータ（levelToParams の結果から必要分を抜き出したもの）。 */
+/**
+ * 個数範囲プリセット（spec §4.9・AS-36、設定 Settings.countRange）。
+ * - 'cells_minus_1'：1 〜 (gridSize²−1)（最大限ランダム）
+ * - 'half'：1 〜 floor(gridSize²/2)（過密回避の中庸）
+ * - 'fixed_1_4'：1 〜 4（サイズ非依存）
+ */
+export type CountRangePreset = 'cells_minus_1' | 'half' | 'fixed_1_4';
+
+/** countRange プリセットの一覧（設定 UI 用）。 */
+export const COUNT_RANGE_PRESETS: readonly CountRangePreset[] = [
+  'cells_minus_1',
+  'half',
+  'fixed_1_4',
+];
+
+/** 既定の個数範囲プリセット（spec §4.9、Designer/Generator 仮置き＝中庸の 'half'）。 */
+export const DEFAULT_COUNT_RANGE: CountRangePreset = 'half';
+
+/** 生成パラメータ（levelToParams の結果＋抽選後の個数）。 */
 export type RoundGenParams = {
   /** 格子サイズ n（n×n）。3〜6（v3.1 拡張）。 */
   gridSize: number;
-  /** 回転パッチ個数（レベルで確定、1〜6）。生成時に格子容量でクランプされる（§4.7）。 */
+  /** 回転パッチ個数（v3.2：countRange から抽選した実値）。生成時に格子容量でクランプ（§4.7）。 */
   count: number;
   /** 回転速度（deg/sec）。 */
   rotationSpeed: number;
@@ -29,6 +48,51 @@ export type RoundGenParams = {
 
 /** 静止パッチ同士の最小角度差の狙い（system §7.2、12° 以上）。 */
 export const STATIC_MIN_ANGLE_GAP_DEG = 12;
+
+/**
+ * countRange プリセット × 格子サイズ → 回転個数の [min, max]（両端含む、spec §4.9）。
+ *
+ * いずれのプリセットでも、回転個数 < gridSize²（静止パッチが最低 1 つ残る）となるよう
+ * max を gridSize²−1 でクランプし、min ≥ 1・min ≤ max を保証する。
+ * 純関数。
+ */
+export function countRangeBounds(
+  preset: CountRangePreset,
+  gridSize: number,
+): { min: number; max: number } {
+  const cellCount = gridSize * gridSize;
+  const hardMax = Math.max(1, cellCount - 1); // 静止 1 つ以上（§4.7）
+  let max: number;
+  switch (preset) {
+    case 'cells_minus_1':
+      max = cellCount - 1;
+      break;
+    case 'fixed_1_4':
+      max = 4;
+      break;
+    case 'half':
+    default:
+      max = Math.floor(cellCount / 2);
+      break;
+  }
+  max = Math.min(Math.max(1, max), hardMax);
+  return { min: 1, max };
+}
+
+/**
+ * countRange プリセット × 格子サイズから、1 ラウンドの回転個数をランダム抽選する（spec §4.9）。
+ * [min, max]（両端含む）の一様整数。最後に格子容量でクランプ（§4.7）。
+ */
+export function pickRoundCount(
+  rng: Rng,
+  preset: CountRangePreset,
+  gridSize: number,
+): number {
+  const { min, max } = countRangeBounds(preset, gridSize);
+  const picked = Math.floor(randFloat(rng, min, max + 1));
+  const bounded = Math.min(Math.max(picked, min), max);
+  return clampCountToGrid(bounded, gridSize);
+}
 
 /**
  * 有効な回転パッチ個数を格子容量でクランプする（spec §4.7 / NF-28d）。
@@ -47,11 +111,17 @@ export function clampCountToGrid(count: number, gridSize: number): number {
   return Math.min(Math.max(count, 1), maxChanging);
 }
 
-/** LevelParams（5 変数の実値）から RoundGenParams を作る。 */
-export function levelParamsToRoundGen(params: LevelParams): RoundGenParams {
+/**
+ * LevelParams（難易度変数）＋抽選済み個数 → RoundGenParams を作る（v3.2）。
+ * 個数はレベルに含まれないため、呼び出し側が `pickRoundCount` 等で解決した値を渡す。
+ */
+export function levelParamsToRoundGen(
+  params: LevelParams,
+  count: number,
+): RoundGenParams {
   return {
     gridSize: params.gridSize,
-    count: params.count,
+    count,
     rotationSpeed: params.rotationSpeed,
     direction: params.direction,
   };
@@ -131,10 +201,15 @@ export function generateRound(rng: Rng, params: RoundGenParams): PatchDef[] {
   return patches;
 }
 
-/** レベルの 5 変数から直接 1 ラウンドを生成するショートカット。 */
+/**
+ * レベルの難易度変数 ＋ countRange プリセットから直接 1 ラウンドを生成するショートカット（v3.2）。
+ * 個数は `countRange` × `params.gridSize` から抽選する（spec §4.9）。
+ */
 export function generateRoundFromLevel(
   rng: Rng,
   params: LevelParams,
+  countRange: CountRangePreset = DEFAULT_COUNT_RANGE,
 ): PatchDef[] {
-  return generateRound(rng, levelParamsToRoundGen(params));
+  const count = pickRoundCount(rng, countRange, params.gridSize);
+  return generateRound(rng, levelParamsToRoundGen(params, count));
 }

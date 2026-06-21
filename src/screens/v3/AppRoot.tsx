@@ -36,6 +36,7 @@ import { BottomTabBar, TabKey } from '../../components/v3/BottomTabBar';
 import { ConfirmDialog } from '../../components/v3/ConfirmDialog';
 import { SessionSummaryCard } from '../../components/v3/SessionSummaryCard';
 import { GameScreen } from './GameScreen';
+import { TutorialScreen } from './TutorialScreen';
 import { DistanceReminderScreen } from './DistanceReminderScreen';
 import { HistoryScreen } from './HistoryScreen';
 import { SettingsScreen } from './SettingsScreen';
@@ -58,7 +59,12 @@ import {
 } from '../../lib/v3/sessionMachine';
 import type { GameConfig } from '../../lib/v3/gameMachine';
 import type { ViewingDistanceCm } from '../../lib/calibration';
-import type { OneEyeGuidance, BadgeId, Settings } from '../../state/v3/schema';
+import type {
+  OneEyeGuidance,
+  BadgeId,
+  Settings,
+  CountRangePreset,
+} from '../../state/v3/schema';
 import { DEFAULT_SESSION_MINUTES } from '../../state/v3/schema';
 import { loadLevelState } from '../../state/v3/repository';
 import { Rng } from '../../lib/v2/rng';
@@ -67,8 +73,8 @@ import type { AudioBackend } from '../../platform/audio';
 import type { HapticsBackend } from '../../platform/haptics';
 import { t } from '../../i18n';
 
-/** ホームタブのサブフェーズ（v3.1、screens.md S7）。 */
-type HomePhase = 'distance' | 'playing' | 'summary';
+/** ホームタブのサブフェーズ（v3.1 + v3.2 tutorial、screens.md S7 / §4.8）。 */
+type HomePhase = 'distance' | 'tutorial' | 'playing' | 'summary';
 
 /** セッション要約カード表示用データ（F-08）。 */
 export type SessionSummary = {
@@ -133,6 +139,12 @@ export type AppRootProps = {
   ranges?: VariableRanges;
   /** 変化順。未指定はデフォルト順。 */
   order?: readonly VariableKey[];
+  /** 【v3.2】本番の個数ランダム範囲プリセット（§4.9）。未指定は既定（'half'）。 */
+  countRange?: CountRangePreset;
+  /** 【v3.2】初回プレイ時にチュートリアル Lv0 を表示するか（§4.8/F-15、UserProfile.tutorialCompleted の否定）。 */
+  showTutorial?: boolean;
+  /** 【v3.2】チュートリアル完了時の通知（呼び出し側で tutorialCompleted を永続化）。 */
+  onTutorialComplete?: () => void;
   /**
    * 1 ラウンド完了の解決（resolveCompletedRound：applyResult + LevelState 永続）。
    * 未指定（テスト等）はメモリ上で completeRound のみ行うフォールバックを使う。
@@ -173,6 +185,9 @@ export const AppRoot: React.FC<AppRootProps> = ({
   hapticsBackend,
   ranges,
   order,
+  countRange,
+  showTutorial = false,
+  onTutorialComplete,
   onResolveRound,
   onFinalizeSession,
   onSettingsChange,
@@ -213,13 +228,16 @@ export const AppRoot: React.FC<AppRootProps> = ({
 
   const dialogOpen = abort !== null;
 
+  // 初回プレイのチュートリアル待ち（§4.8/F-15）。距離リマインド後に 'tutorial' へ。
+  const [tutorialPending, setTutorialPending] = React.useState(showTutorial);
+
   // 現ラウンドの GameConfig（session.levelState.currentLevel で生成）。
   const config = React.useMemo<GameConfig>(() => {
     const level = session.levelState.currentLevel;
-    return { level, params: levelToParams(level, order, ranges) };
+    return { level, params: levelToParams(level, order, ranges), countRange };
     // roundKey を依存に含めて再生成（次ラウンド・中断後・もう一度）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.levelState.currentLevel, roundKey, ranges, order]);
+  }, [session.levelState.currentLevel, roundKey, ranges, order, countRange]);
 
   // 空間周波数（cpd）はレベル連動：最高レベル（範囲設定で変わる）を先に求めて補間する。
   // 最易レベル=1.5cpd、最難レベル=6cpd（cpdForLevel）。ranges/order 未指定はデフォルト（720）。
@@ -259,12 +277,25 @@ export const AppRoot: React.FC<AppRootProps> = ({
     if (summary) setHomePhase('summary');
   }, [summary]);
 
-  // 距離リマインド完了 → 新しいセッションを開始（F-06：自動開始）。
+  // 距離リマインド完了 → 初回はチュートリアル（§4.8）、以降は新セッション開始（F-06）。
   const handleDistanceComplete = React.useCallback(() => {
+    if (tutorialPending) {
+      setHomePhase('tutorial');
+      return;
+    }
     setSession(startSession(levelState, sessionMinutes));
     setRoundKey((k) => k + 1);
     setHomePhase('playing');
-  }, [levelState, sessionMinutes]);
+  }, [tutorialPending, levelState, sessionMinutes]);
+
+  // チュートリアル完了（§4.8/F-15）：以降は表示しない（永続は呼び出し側）。本番 L1 セッションを開始。
+  const handleTutorialComplete = React.useCallback(() => {
+    setTutorialPending(false);
+    onTutorialComplete?.();
+    setSession(startSession(levelState, sessionMinutes));
+    setRoundKey((k) => k + 1);
+    setHomePhase('playing');
+  }, [levelState, sessionMinutes, onTutorialComplete]);
 
   // セッションを確定記録し、要約を表示する（finalize / abort 共通）。
   const finalizeAndShowSummary = React.useCallback(
@@ -416,6 +447,17 @@ export const AppRoot: React.FC<AppRootProps> = ({
         onAbort={handleDistanceAbort}
         countdownSec={distanceCountdownSec}
         testId={testId ? `${testId}-distance` : 'v3-distance'}
+      />
+    );
+  } else if (homePhase === 'tutorial') {
+    homeContent = (
+      <TutorialScreen
+        viewingDistanceCm={viewingDistanceCm}
+        dpi={dpi}
+        rng={rng}
+        onComplete={handleTutorialComplete}
+        onFeedback={emit}
+        testId={testId ? `${testId}-tutorial` : 'v3-tutorial'}
       />
     );
   } else if (homePhase === 'summary' && summary) {

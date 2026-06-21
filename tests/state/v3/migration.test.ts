@@ -128,13 +128,12 @@ describe('v3.0 → v3.1 非リセット補完（§7.9・名前空間据え置き
       STORAGE_KEYS.settings,
       JSON.stringify({
         variableRanges: {
-          count: [1, 2, 3, 4],
           seconds: [40, 35, 30, 25, 20],
           direction: ['one-way', 'oscillate'],
           gridSize: [3, 4],
           rotationSpeed: [6, 5.5, 5, 4.5, 4, 3.5, 3, 2.5, 2],
         },
-        variableOrder: ['count', 'seconds', 'direction', 'gridSize', 'rotationSpeed'],
+        variableOrder: ['seconds', 'direction', 'gridSize', 'rotationSpeed'],
         darkMode: 'system',
         soundEnabled: true,
         hapticsEnabled: true,
@@ -143,8 +142,12 @@ describe('v3.0 → v3.1 非リセット補完（§7.9・名前空間据え置き
     );
     await ensureV3Initialized();
     const s = await loadSettings();
-    expect(s.sessionMinutes).toBe(5); // 既定で補完（梯子は v3.0 のまま）
-    expect(s.variableRanges.count).toEqual([1, 2, 3, 4]);
+    expect(s.sessionMinutes).toBe(5); // 既定で補完
+    // v3.2：repeatCount 既定 4 → repeat 軸 [1..4] が同期され、変化順もデフォルトに正規化される。
+    expect(s.repeatCount).toBe(4);
+    expect(s.countRange).toBe('half');
+    expect(s.variableRanges.repeat).toEqual([1, 2, 3, 4]);
+    expect(s.variableOrder[0]).toBe('repeat');
   });
 
   it('旧 v3.0 PlayStats（totalGames）を totalSessions/totalRounds に補完する', async () => {
@@ -155,7 +158,7 @@ describe('v3.0 → v3.1 非リセット補完（§7.9・名前空間据え置き
     expect(p.totalRounds).toBe(12);
   });
 
-  it('UserProfile.schemaVersion を 3.1.0 へ更新する（既存プロフィールは保持）', async () => {
+  it('UserProfile.schemaVersion を 3.2.0 へ更新する（既存プロフィールは保持）', async () => {
     await AsyncStorage.setItem(
       STORAGE_KEYS.userProfile,
       JSON.stringify({
@@ -170,7 +173,7 @@ describe('v3.0 → v3.1 非リセット補完（§7.9・名前空間据え置き
     );
     await ensureV3Initialized();
     const p = await loadUserProfile();
-    expect(p.schemaVersion).toBe('3.1.0');
+    expect(p.schemaVersion).toBe('3.2.0');
     expect(p.onboardingCompleted).toBe(true); // 既存値は保持
     expect(p.ageGroup).toBe('50s');
   });

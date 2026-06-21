@@ -48,7 +48,11 @@ import {
   VIEWING_DISTANCE_OPTIONS,
   SESSION_MINUTES_MIN,
   SESSION_MINUTES_MAX,
+  REPEAT_COUNT_MIN,
+  REPEAT_COUNT_MAX,
+  COUNT_RANGE_PRESETS,
   type VariableKey,
+  type CountRangePreset,
 } from '../../state/v3/schema';
 import type { Direction, GridSize } from '../../lib/v3/level';
 import {
@@ -68,6 +72,8 @@ import {
   setHapticsEnabled,
   setOneEyeGuidance,
   setSessionMinutes,
+  setRepeatCount,
+  setCountRange,
   settingsTotalLevels,
   normalizeViewingDistance,
 } from '../../state/v3/settings';
@@ -108,12 +114,21 @@ const ONE_EYE_OPTIONS: ReadonlyArray<{ value: OneEyeGuidance; label: string }> =
 ];
 
 const VAR_LABEL: Record<VariableKey, string> = {
-  count: t('settingsV3.var_count'),
+  repeat: t('settingsV3.var_repeat'),
   seconds: t('settingsV3.var_seconds'),
   direction: t('settingsV3.var_direction'),
   gridSize: t('settingsV3.var_gridSize'),
   rotationSpeed: t('settingsV3.var_rotationSpeed'),
 };
+
+/** countRange プリセットの選択肢（SegmentedControl 用）。 */
+const COUNT_RANGE_OPTIONS: ReadonlyArray<{
+  value: CountRangePreset;
+  label: string;
+}> = COUNT_RANGE_PRESETS.map((preset) => ({
+  value: preset,
+  label: t(`settingsV3.count_range_${preset}`),
+}));
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onSettingsChange,
@@ -222,10 +237,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   }
 
   const total = settingsTotalLevels(settings);
-  const orderItems = settings.variableOrder.map((key) => ({
-    key,
-    label: VAR_LABEL[key],
-  }));
+  // v3.2：repeat は最内側固定で組み替え対象外のため、変化順 UI からは除外する（§4.2）。
+  const orderItems = settings.variableOrder
+    .filter((key) => key !== 'repeat')
+    .map((key) => ({
+      key,
+      label: VAR_LABEL[key],
+    }));
   const agreedLabel = profile.disclaimerAgreedAt
     ? formatDateTime(profile.disclaimerAgreedAt)
     : t('settingsV3.disclaimer_not_agreed');
@@ -259,6 +277,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }
               testId={testId ? `${testId}-session-minutes` : 'session-minutes'}
             />
+            {/* v3.2：繰り返し回数（梯子に影響＝updateLevelSettings）。 */}
+            <RepeatCountRow
+              value={settings.repeatCount}
+              onChange={(n) =>
+                applyLevelSetting((s) => setRepeatCount(s, n))
+              }
+              testId={testId ? `${testId}-repeat-count` : 'repeat-count'}
+            />
+            {/* v3.2：個数の範囲プリセット（梯子に非干渉＝updateSettings）。 */}
+            <View style={styles.segmentRow} testID={testId ? `${testId}-count-range` : 'count-range'}>
+              <Text style={[styles.sessionLabel, { color: colors.fgPrimary }]}>
+                {t('settingsV3.count_range')}
+              </Text>
+              <SegmentedControl
+                options={COUNT_RANGE_OPTIONS}
+                value={settings.countRange}
+                onChange={(preset) =>
+                  applySetting((s) => setCountRange(s, preset))
+                }
+                accessibilityLabel={t('settingsV3.count_range')}
+              />
+              <Text style={[styles.sessionHint, { color: colors.fgSecondary }]}>
+                {t('settingsV3.count_range_hint')}
+              </Text>
+            </View>
           </View>
 
           {/* ── 各変数の範囲（テスト用）── */}
@@ -271,17 +314,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             {t('settingsV3.total_levels', { n: total })}
           </Text>
 
-          <RangeRow
-            label={t('settingsV3.range_count')}
-            groupLabel={t('settingsV3.range_count')}
-            chips={VALUE_SETS.count.map((v) => ({ value: v, label: `${v}` }))}
-            selected={settings.variableRanges.count}
-            onChange={(values) =>
-              applyLevelSetting((s) => setVariableRange(s, 'count', values))
-            }
-            onMinViolation={() => showError(t('settingsV3.range_min_one'))}
-            testId={testId ? `${testId}-range-count` : 'range-count'}
-          />
           <RangeRow
             label={t('settingsV3.range_seconds')}
             groupLabel={t('settingsV3.range_seconds')}
@@ -354,7 +386,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           <VariableOrderList
             items={orderItems}
             onReorder={(keys) =>
-              applyLevelSetting((s) => setVariableOrder(s, keys))
+              // repeat を最内側に戻して保存（UI は外側 4 変数のみ並べ替え、§4.2）。
+              applyLevelSetting((s) => setVariableOrder(s, ['repeat', ...keys]))
             }
             onMoved={(label, pos) =>
               showInfo(t('settingsV3.order_moved', { name: label, pos }))
@@ -593,6 +626,91 @@ const SessionMinutesRow: React.FC<{
   );
 };
 
+/**
+ * SR-1b：repeatCount ステッパー行（[−] {n}回 [+]、56pt タップ、1〜6・既定 4、v3.2）。
+ * SR-1a と同型だが、こちらは**梯子に影響する**（総レベル数 n×180／クランプ+連続失敗リセット）。
+ */
+const RepeatCountRow: React.FC<{
+  value: number;
+  onChange: (n: number) => void;
+  testId?: string;
+}> = ({ value, onChange, testId }) => {
+  const { colors } = useTheme();
+  const focus = useFocusStyle();
+  const atMin = value <= REPEAT_COUNT_MIN;
+  const atMax = value >= REPEAT_COUNT_MAX;
+  const valueText = t('settingsV3.repeat_count_value', { n: value });
+
+  return (
+    <View style={styles.sessionRowOuter} testID={testId}>
+      <View style={styles.sessionRow}>
+        <Text style={[styles.sessionLabel, { color: colors.fgPrimary }]}>
+          {t('settingsV3.repeat_count')}
+        </Text>
+        <View
+          style={styles.stepper}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          {...({
+            role: 'spinbutton',
+            'aria-valuenow': value,
+            'aria-valuemin': REPEAT_COUNT_MIN,
+            'aria-valuemax': REPEAT_COUNT_MAX,
+            'aria-valuetext': valueText,
+            'aria-label': t('settingsV3.repeat_count'),
+          } as any)}
+        >
+          <Pressable
+            onPress={() => !atMin && onChange(value - 1)}
+            disabled={atMin}
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsV3.repeat_count_dec')}
+            accessibilityState={{ disabled: atMin }}
+            style={({ pressed }) => [
+              styles.stepperBtn,
+              { borderColor: colors.borderInput },
+              atMin && styles.stepperBtnDisabled,
+              focus,
+              pressed && !atMin && styles.pressed,
+            ]}
+            testID={testId ? `${testId}-dec` : undefined}
+          >
+            <Text style={[styles.stepperSign, { color: colors.fgPrimary }]}>−</Text>
+          </Pressable>
+          <Text
+            style={[styles.stepperValue, { color: colors.fgPrimary }]}
+            accessibilityLiveRegion="polite"
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            {...({ 'aria-live': 'polite' } as any)}
+            testID={testId ? `${testId}-value` : undefined}
+          >
+            {valueText}
+          </Text>
+          <Pressable
+            onPress={() => !atMax && onChange(value + 1)}
+            disabled={atMax}
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsV3.repeat_count_inc')}
+            accessibilityState={{ disabled: atMax }}
+            style={({ pressed }) => [
+              styles.stepperBtn,
+              { borderColor: colors.borderInput },
+              atMax && styles.stepperBtnDisabled,
+              focus,
+              pressed && !atMax && styles.pressed,
+            ]}
+            testID={testId ? `${testId}-inc` : undefined}
+          >
+            <Text style={[styles.stepperSign, { color: colors.fgPrimary }]}>＋</Text>
+          </Pressable>
+        </View>
+      </View>
+      <Text style={[styles.sessionHint, { color: colors.fgSecondary }]}>
+        {t('settingsV3.repeat_count_hint')}
+      </Text>
+    </View>
+  );
+};
+
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -634,6 +752,10 @@ const styles = StyleSheet.create({
   // SR-1a sessionMinutes ステッパー
   sessionRowOuter: {
     paddingVertical: spacing.s1,
+  },
+  segmentRow: {
+    paddingVertical: spacing.s2,
+    gap: spacing.s2,
   },
   sessionRow: {
     minHeight: tapTarget.recommended,

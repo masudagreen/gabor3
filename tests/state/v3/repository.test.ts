@@ -34,15 +34,17 @@ beforeEach(async () => {
 describe('Settings', () => {
   it('未保存時は既定（フル範囲）を返す', async () => {
     const s = await loadSettings();
-    expect(s.variableRanges.count).toEqual([1, 2, 3, 4]);
+    expect(s.variableRanges.repeat).toEqual([1, 2, 3, 4]);
+    expect(s.repeatCount).toBe(4);
+    expect(s.countRange).toBe('half');
   });
   it('保存値を読み戻し、破損部分集合は正規化される', async () => {
     await AsyncStorage.setItem(
       STORAGE_KEYS.settings,
-      JSON.stringify({ ...defaultSettings(), variableRanges: { ...defaultSettings().variableRanges, count: [3, 1] } }),
+      JSON.stringify({ ...defaultSettings(), variableRanges: { ...defaultSettings().variableRanges, seconds: [20, 40] } }),
     );
     const s = await loadSettings();
-    expect(s.variableRanges.count).toEqual([1, 3]); // 易→難順に正規化
+    expect(s.variableRanges.seconds).toEqual([40, 20]); // 易→難順に正規化
   });
   it('v3 キーに書く', async () => {
     await saveSettings(defaultSettings());

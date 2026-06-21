@@ -1,12 +1,11 @@
 /**
  * OnboardingScreen.tsx — 初回オンボーディング（初回のみ、F-06/F-10）。
  *
- * 3 ページ構成（ユーザー要望リデザイン）：
- *   [1/3] 使用上の注意（免責文）— 「次へ」で進む。同意日時はここで確定。
- *   [2/3] 視聴距離（30/40/50）— **既定は非選択**。選択で「次へ」活性化。
+ * 2 ページ構成（v3.2：旧 3 ページ目「遊び方」はチュートリアル Lv0（§4.8）と重複するため廃止）：
+ *   [1/2] 使用上の注意（免責文）— 「次へ」で進む。同意日時はここで確定。
+ *   [2/2] 視聴距離（30/40/50）— **既定は非選択**。選択で「はじめる」活性化。
  *          選択後、その距離での cpd=3 パッチ例を下部にプレビュー表示。
- *   [3/3] チュートリアル — 3x3 格子の 1 つが 12 deg/sec で回転。タップで完了 →
- *          onComplete（呼び出し側で距離リマインドのカウントダウンへ）。
+ *          「はじめる」で onComplete（呼び出し側で距離リマインド → 初回はチュートリアル Lv0 へ）。
  *
  * 年代（ageGroup）はゲーム内容に未使用のため**設問を廃止**し、結果は 'unspecified' 固定で返す
  * （永続化スキーマは不変）。
@@ -36,28 +35,18 @@ import {
   tapTarget,
 } from '../../theme/tokens';
 import { t } from '../../i18n';
-import { webAria } from '../../theme/ariaWeb';
-import { webSpaceActivation } from '../../theme/keyActivation';
 import { SegmentedControl } from '../../components/v2/SegmentedControl';
 import { GaborPatch } from '../../components/GaborPatch';
-import { useGameTimer } from '../../hooks/v2/useGameTimer';
 import type { AgeGroup } from '../../state/v3/schema';
 import type { ViewingDistanceCm } from '../../lib/calibration';
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 2;
 
-/** プレビュー／チュートリアルのパッチ描画パラメータ。 */
+/** 距離プレビューのパッチ描画パラメータ。 */
 const PREVIEW_CPD = 3; // ユーザー要望：距離プレビューは cpd=3。
 const PATCH_CONTRAST = 0.5;
 const PATCH_SIGMA_DEG = 0.6;
 const PREVIEW_SIZE_PX = 140;
-const TUTORIAL_SIZE_PX = 88;
-const TUTORIAL_GRID = 3; // 3x3。
-const TUTORIAL_CELLS = TUTORIAL_GRID * TUTORIAL_GRID;
-/** チュートリアルの回転速度（ユーザー要望：12 deg/sec）。 */
-const TUTORIAL_ROTATION_DEG_PER_SEC = 12;
-/** 回転駆動用タイマーの十分長い上限（チュートリアルは時間切れ概念なし）。 */
-const TUTORIAL_TIMER_SEC = 1e6;
 
 export type OnboardingResult = {
   ageGroup: AgeGroup;
@@ -70,8 +59,6 @@ export type OnboardingScreenProps = {
   onComplete: (result: OnboardingResult) => void;
   /** 同意日時を採取する時計（テスト決定論）。既定は new Date()。 */
   now?: () => Date;
-  /** チュートリアルで回転させるセル index（テスト決定論）。既定はランダム。 */
-  tutorialTargetIndex?: number;
   testId?: string;
 };
 
@@ -87,41 +74,23 @@ const DISTANCE_OPTIONS: ReadonlyArray<{
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onComplete,
   now = () => new Date(),
-  tutorialTargetIndex,
   testId,
 }) => {
   const { colors } = useTheme();
 
   const [step, setStep] = React.useState(1);
-  // 視聴距離は**既定非選択**（null）。選択して初めて「次へ」が活性化する。
+  // 視聴距離は**既定非選択**（null）。選択して初めて「はじめる」が活性化する。
   const [distance, setDistance] = React.useState<ViewingDistanceCm | null>(null);
   const agreedAtRef = React.useRef<string | null>(null);
 
-  // チュートリアルで回転させるセル（マウント時に 1 度だけ確定）。
-  const [targetIndex] = React.useState(() =>
-    tutorialTargetIndex != null
-      ? tutorialTargetIndex
-      : Math.floor(Math.random() * TUTORIAL_CELLS),
-  );
-
-  // 回転駆動：step 3 のときだけ rAF で経過秒を進める。orientationDeg は transform で適用。
-  const { elapsedSec } = useGameTimer({
-    durationSec: TUTORIAL_TIMER_SEC,
-    active: step === 3,
-    roundKey: 'onboarding-tutorial',
-    onTimeout: () => {},
-  });
-  const orientationDeg =
-    (elapsedSec * TUTORIAL_ROTATION_DEG_PER_SEC) % 360;
-
-  // [1/3] 使用上の注意：「次へ」で同意日時を確定しステップ 2 へ。
+  // [1/2] 使用上の注意：「次へ」で同意日時を確定しステップ 2 へ。
   const handleAgree = React.useCallback(() => {
     agreedAtRef.current = now().toISOString();
     setStep(2);
   }, [now]);
 
-  // [3/3] 回転パッチのタップ＝チュートリアル終了 → 完了通知。
-  const handleTutorialTap = React.useCallback(() => {
+  // [2/2] 「はじめる」＝オンボーディング完了 → 完了通知（距離リマインド → チュートリアルへ）。
+  const handleComplete = React.useCallback(() => {
     onComplete({
       ageGroup: 'unspecified',
       viewingDistanceCm: distance ?? 40,
@@ -179,8 +148,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               onChange={setDistance}
               accessibilityLabel={t('onboardingV3.distance_title')}
             />
-            {/* 距離オプションと「次へ」の間に常に 1 パッチ分の高さを確保し、選択しても
-                「次へ」の位置がずれないようにする（未選択時は空のプレースホルダ）。 */}
+            {/* 距離オプションと「はじめる」の間に常に 1 パッチ分の高さを確保し、選択しても
+                ボタン位置がずれないようにする（未選択時は空のプレースホルダ）。 */}
             <View
               style={styles.previewSlot}
               testID={testId ? `${testId}-distance-preview` : undefined}
@@ -200,49 +169,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               )}
             </View>
             <PrimaryButton
-              label={t('common.next')}
-              onPress={() => setStep(3)}
+              label={t('onboardingV3.start_game')}
+              onPress={handleComplete}
               disabled={distance === null}
-              testId={testId ? `${testId}-next-2` : undefined}
+              testId={testId ? `${testId}-start` : undefined}
             />
-          </View>
-        )}
-
-        {step === 3 && (
-          <View style={styles.stepBody} testID={testId ? `${testId}-step-3` : undefined}>
-            <Text style={[styles.h1, { color: colors.fgPrimary }]}>
-              {t('onboardingV3.tutorial_title')}
-            </Text>
-            <Text
-              style={[styles.body, { color: colors.fgPrimary }]}
-              testID={testId ? `${testId}-tutorial-body` : undefined}
-            >
-              {t('onboardingV3.tutorial_body')}
-            </Text>
-            <View style={styles.tutorialGrid}>
-              {Array.from({ length: TUTORIAL_GRID }, (_, r) => (
-                <View key={`row-${r}`} style={styles.tutorialRow}>
-                  {Array.from({ length: TUTORIAL_GRID }, (_, c) => {
-                    const index = r * TUTORIAL_GRID + c;
-                    const isTarget = index === targetIndex;
-                    return (
-                      <TutorialCell
-                        key={`cell-${index}`}
-                        isTarget={isTarget}
-                        orientationDeg={isTarget ? orientationDeg : 0}
-                        distance={distance ?? 40}
-                        onPress={handleTutorialTap}
-                        testId={
-                          testId
-                            ? `${testId}-tutorial-cell-${index}`
-                            : undefined
-                        }
-                      />
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
           </View>
         )}
 
@@ -262,67 +193,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
-};
-
-/**
- * チュートリアル 1 セル。回転対象（isTarget）のみタップ可能（onPress）で a11y ラベルを持つ。
- * 非対象は装飾（SR から隠す）。
- */
-const TutorialCell: React.FC<{
-  isTarget: boolean;
-  orientationDeg: number;
-  distance: ViewingDistanceCm;
-  onPress: () => void;
-  testId?: string;
-}> = ({ isTarget, orientationDeg, distance, onPress, testId }) => {
-  const focus = useFocusStyle();
-  const label = t('onboardingV3.tutorial_patch_label');
-
-  const patch = (
-    <GaborPatch
-      cpd={PREVIEW_CPD}
-      contrast={PATCH_CONTRAST}
-      orientationDeg={orientationDeg}
-      phaseRad={0}
-      sigmaDeg={PATCH_SIGMA_DEG}
-      sizePx={TUTORIAL_SIZE_PX}
-      viewingDistanceCm={distance}
-    />
-  );
-
-  if (!isTarget) {
-    // 静止セルは装飾。SR から隠してチュートリアルのフォーカスを回転対象に集約する。
-    return (
-      <View
-        style={styles.tutorialCell}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        {...({ 'aria-hidden': true } as any)}
-        pointerEvents="none"
-      >
-        {patch}
-      </View>
-    );
-  }
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      {...webAria('button', undefined, label)}
-      {...webSpaceActivation(onPress)}
-      style={({ pressed }) => [
-        styles.tutorialCell,
-        focus,
-        pressed && styles.pressed,
-      ]}
-      testID={testId}
-    >
-      {patch}
-    </Pressable>
   );
 };
 
@@ -391,23 +261,6 @@ const styles = StyleSheet.create({
     height: PREVIEW_SIZE_PX,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tutorialGrid: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.s3,
-    paddingTop: spacing.s3,
-  },
-  tutorialRow: {
-    flexDirection: 'row',
-    gap: spacing.s3,
-  },
-  tutorialCell: {
-    width: TUTORIAL_SIZE_PX,
-    height: TUTORIAL_SIZE_PX,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.sm,
   },
   cta: {
     minHeight: tapTarget.recommended,

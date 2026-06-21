@@ -169,7 +169,7 @@ export async function recordCompletedSession(
         // levelParams にはダミー（endLevel 相当ではなく難度判定を確実に false にする最易）を渡す。
         result: params ? 'clear' : 'fail',
         levelParams: params ?? {
-          count: ranges.count[0],
+          repeat: ranges.repeat[0],
           seconds: ranges.seconds[0],
           direction: 'one-way',
           gridSize: ranges.gridSize[0],

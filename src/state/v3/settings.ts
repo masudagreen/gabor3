@@ -16,14 +16,23 @@ import {
   VALUE_SETS,
   DEFAULT_VARIABLE_ORDER,
   defaultVariableRanges,
+  repeatRange,
   totalLevels,
   clampLevelState,
+  MIN_REPEAT_COUNT,
+  MAX_REPEAT_COUNT,
+  DEFAULT_REPEAT_COUNT,
   type VariableKey,
   type VariableRanges,
   type Direction,
   type GridSize,
   type LevelState,
 } from '../../lib/v3/level';
+import {
+  COUNT_RANGE_PRESETS,
+  DEFAULT_COUNT_RANGE,
+  type CountRangePreset,
+} from '../../lib/v3/roundGen';
 import type { ViewingDistanceCm } from '../../lib/calibration';
 import {
   DARK_MODES,
@@ -39,8 +48,9 @@ import {
 } from './schema';
 import { loadSettings, saveSettings, loadLevelState, saveLevelState } from './repository';
 
+/** 変化順に並ぶ全変数キー（repeat 最内側固定＋外側 4）。 */
 const VARIABLE_KEYS: readonly VariableKey[] = [
-  'count',
+  'repeat',
   'seconds',
   'direction',
   'gridSize',
@@ -75,7 +85,9 @@ export function sanitizeVariableRanges(
   const full = defaultVariableRanges();
   const src = ranges ?? {};
   return {
-    count: normalizeAxis(src.count ?? full.count, VALUE_SETS.count) ?? [...full.count],
+    // repeat は [1..n] の連続前置部分集合（sanitizeSettings で repeatCount に同期）。
+    repeat:
+      normalizeAxis(src.repeat ?? full.repeat, VALUE_SETS.repeat) ?? [...full.repeat],
     seconds:
       normalizeAxis(src.seconds ?? full.seconds, VALUE_SETS.seconds) ??
       [...full.seconds],
@@ -98,13 +110,17 @@ export function sanitizeVariableRanges(
 }
 
 /**
- * variableOrder を「5 変数キーの順列」に正規化する。
- * 不正（欠落・重複・未知キー）なら DEFAULT_VARIABLE_ORDER を返す。
+ * variableOrder を正規化する（v3.2）。5 変数キーの順列であり、かつ
+ * **`repeat` が最内側（index 0）固定**であること（spec §4.2）。
+ * 不正（欠落・重複・未知キー・repeat が先頭でない）なら DEFAULT_VARIABLE_ORDER を返す。
  */
 export function sanitizeVariableOrder(
   order: readonly VariableKey[] | null | undefined,
 ): VariableKey[] {
   if (!order || order.length !== VARIABLE_KEYS.length) {
+    return [...DEFAULT_VARIABLE_ORDER];
+  }
+  if (order[0] !== 'repeat') {
     return [...DEFAULT_VARIABLE_ORDER];
   }
   const seen = new Set<VariableKey>();
@@ -115,6 +131,22 @@ export function sanitizeVariableOrder(
     seen.add(key);
   }
   return [...order];
+}
+
+/** 繰り返し回数 n を 1〜6 の整数にクランプする（spec §4.1/AS-37、不正値は既定 4）。 */
+export function sanitizeRepeatCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_REPEAT_COUNT;
+  }
+  const rounded = Math.round(value);
+  return Math.min(Math.max(rounded, MIN_REPEAT_COUNT), MAX_REPEAT_COUNT);
+}
+
+/** countRange プリセットを妥当化する（不正値は既定）。 */
+export function sanitizeCountRange(value: unknown): CountRangePreset {
+  return COUNT_RANGE_PRESETS.includes(value as CountRangePreset)
+    ? (value as CountRangePreset)
+    : DEFAULT_COUNT_RANGE;
 }
 
 /**
@@ -131,9 +163,15 @@ export function sanitizeSessionMinutes(value: unknown): number {
 
 /** Settings 全体を妥当化する（load 時の破損修復・部分マージ後の正規化）。 */
 export function sanitizeSettings(settings: Settings): Settings {
+  const repeatCount = sanitizeRepeatCount(settings.repeatCount);
+  const variableRanges = sanitizeVariableRanges(settings.variableRanges);
+  // repeat 軸を repeatCount に同期（単一の真実の源は repeatCount、spec §4.2）。
+  variableRanges.repeat = repeatRange(repeatCount);
   return {
     sessionMinutes: sanitizeSessionMinutes(settings.sessionMinutes),
-    variableRanges: sanitizeVariableRanges(settings.variableRanges),
+    repeatCount,
+    countRange: sanitizeCountRange(settings.countRange),
+    variableRanges,
     variableOrder: sanitizeVariableOrder(settings.variableOrder),
     darkMode: DARK_MODES.includes(settings.darkMode)
       ? settings.darkMode
@@ -164,6 +202,10 @@ export function setVariableRange<K extends VariableKey>(
   key: K,
   values: readonly VariableRanges[K][number][],
 ): Settings {
+  // repeat は範囲チップでは編集しない（repeatCount スライダーで管理、§4.2）。現状維持。
+  if (key === 'repeat') {
+    return settings;
+  }
   const normalized = normalizeAxis(
     values as readonly unknown[],
     VALUE_SETS[key] as readonly unknown[],
@@ -179,6 +221,34 @@ export function setVariableRange<K extends VariableKey>(
       [key]: normalized,
     } as VariableRanges,
   };
+}
+
+/**
+ * 繰り返し回数 n を設定する（F-13・§4.1/AS-37）。1〜6 にクランプ。
+ * repeat 軸 [1..n] を同期するため梯子（総レベル数 n×180）が変わる。
+ * → 永続化は updateLevelSettings（§4.5 クランプ）で行うこと。
+ */
+export function setRepeatCount(settings: Settings, n: number): Settings {
+  const repeatCount = sanitizeRepeatCount(n);
+  return {
+    ...settings,
+    repeatCount,
+    variableRanges: {
+      ...settings.variableRanges,
+      repeat: repeatRange(repeatCount),
+    },
+  };
+}
+
+/**
+ * 個数範囲プリセットを設定する（F-13・§4.9/AS-36）。
+ * 梯子には影響しない（個数はレベル外）。→ 永続化は updateSettings で行う。
+ */
+export function setCountRange(
+  settings: Settings,
+  preset: CountRangePreset,
+): Settings {
+  return { ...settings, countRange: sanitizeCountRange(preset) };
 }
 
 /** 変化順を設定する（F-13）。5 変数の順列でなければ現状維持。 */

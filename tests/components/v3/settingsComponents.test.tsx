@@ -90,11 +90,11 @@ describe('RangeSelector（RG-1）', () => {
   });
 });
 
-describe('VariableOrderList（OR-1）', () => {
+describe('VariableOrderList（OR-1・v3.2：外側 4 変数のみ並べ替え。repeat は含めない）', () => {
   const items = [
-    { key: 'count', label: '個数' },
     { key: 'seconds', label: '時間' },
     { key: 'direction', label: '回転方向' },
+    { key: 'gridSize', label: 'サイズ' },
   ] as const;
 
   it('行を下へ動かすと順序が入れ替わる', () => {
@@ -102,8 +102,8 @@ describe('VariableOrderList（OR-1）', () => {
     wrap(
       <VariableOrderList items={[...items]} onReorder={onReorder} testId="or" />,
     );
-    fireEvent.press(screen.getByTestId('or-down-count'));
-    expect(onReorder).toHaveBeenCalledWith(['seconds', 'count', 'direction']);
+    fireEvent.press(screen.getByTestId('or-down-seconds'));
+    expect(onReorder).toHaveBeenCalledWith(['direction', 'seconds', 'gridSize']);
   });
 
   it('行を上へ動かすと順序が入れ替わる', () => {
@@ -111,16 +111,16 @@ describe('VariableOrderList（OR-1）', () => {
     wrap(
       <VariableOrderList items={[...items]} onReorder={onReorder} testId="or" />,
     );
-    fireEvent.press(screen.getByTestId('or-up-direction'));
-    expect(onReorder).toHaveBeenCalledWith(['count', 'direction', 'seconds']);
+    fireEvent.press(screen.getByTestId('or-up-gridSize'));
+    expect(onReorder).toHaveBeenCalledWith(['seconds', 'gridSize', 'direction']);
   });
 
   it('先頭の上ボタン・末尾の下ボタンは disabled', () => {
     wrap(
       <VariableOrderList items={[...items]} onReorder={jest.fn()} testId="or" />,
     );
-    expect(screen.getByTestId('or-up-count').props.accessibilityState.disabled).toBe(true);
-    expect(screen.getByTestId('or-down-direction').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('or-up-seconds').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('or-down-gridSize').props.accessibilityState.disabled).toBe(true);
   });
 
   it('上下ボタンに aria-label「{変数名}を 1 つ上へ/下へ」が付く', () => {
@@ -141,7 +141,7 @@ describe('VariableOrderList（OR-1）', () => {
         testId="or"
       />,
     );
-    fireEvent.press(screen.getByTestId('or-down-count'));
-    expect(onMoved).toHaveBeenCalledWith('個数', 2);
+    fireEvent.press(screen.getByTestId('or-down-seconds'));
+    expect(onMoved).toHaveBeenCalledWith('時間', 2);
   });
 });

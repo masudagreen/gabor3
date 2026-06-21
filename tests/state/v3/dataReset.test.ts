@@ -15,7 +15,7 @@ import {
   saveBadgeStatus,
 } from '../../../src/state/v3/repository';
 import { defaultSettings } from '../../../src/state/v3/schema';
-import { setVariableRange as setRange } from '../../../src/state/v3/settings';
+import { setRepeatCount } from '../../../src/state/v3/settings';
 
 beforeEach(async () => {
   await AsyncStorage.clear();
@@ -25,7 +25,7 @@ describe('deleteAllData', () => {
   it('全 v3 キーを空にし LevelState を L1/0/0・Settings をデフォルトに初期化', async () => {
     // データを撒く
     await saveLevelState({ currentLevel: 100, consecutiveFailures: 1, highestLevel: 99 });
-    await saveSettings(setRange(defaultSettings(), 'count', [1, 2]));
+    await saveSettings(setRepeatCount(defaultSettings(), 2));
     await saveSessionRecord({
       sessionId: 's1',
       startedAt: '2026-06-10T00:00:00.000Z',
@@ -56,8 +56,9 @@ describe('deleteAllData', () => {
       consecutiveFailures: 0,
       highestLevel: 0,
     });
-    // Settings はデフォルト（フル範囲）
-    expect((await loadSettings()).variableRanges.count).toEqual([1, 2, 3, 4]);
+    // Settings はデフォルト（repeatCount=4 → repeat 軸 [1..4]）
+    expect((await loadSettings()).variableRanges.repeat).toEqual([1, 2, 3, 4]);
+    expect((await loadSettings()).repeatCount).toBe(4);
   });
 
   it('resetNoticeShown フラグは保持する（再通知させない）', async () => {

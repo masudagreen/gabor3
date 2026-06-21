@@ -23,7 +23,7 @@ import type { LevelParams } from '../../../src/lib/v3/level';
 const NOW = new Date('2026-06-10T12:00:00.000Z');
 
 const EASY_PARAMS: LevelParams = {
-  count: 1,
+  repeat: 1,
   seconds: 40,
   direction: 'one-way',
   gridSize: 3,
@@ -118,9 +118,9 @@ describe('高難度到達軸（B-06〜B-08、クリアのみ対象）', () => {
     ).toBe(false);
   });
 
-  it('B-08「達人の眼」：最難域（個数4・4x4・振動・速度≤2.5）の全条件で獲得', () => {
+  it('B-08「達人の眼」：最難域（4x4・振動・速度≤2.5）の全条件で獲得（v3.2：個数条件なし）', () => {
     const master: LevelParams = {
-      count: 4,
+      repeat: 1,
       seconds: 20,
       direction: 'oscillate',
       gridSize: 4,
@@ -130,15 +130,28 @@ describe('高難度到達軸（B-06〜B-08、クリアのみ対象）', () => {
     expect(meetsBadgeCondition('B-08', ctx({ levelParams: master }))).toBe(true);
   });
 
-  it('B-08：いずれか 1 条件でも欠けると非獲得（境界）', () => {
+  it('B-08：repeat 値は判定に無関係（個数=難易度軸でなくなったため）', () => {
     const base: LevelParams = {
-      count: 4,
+      repeat: 1,
       seconds: 20,
       direction: 'oscillate',
       gridSize: 4,
       rotationSpeed: 2.5,
     };
-    expect(isMasterLevel({ ...base, count: 3 })).toBe(false);
+    // repeat を 1→6 へ変えても最難域判定は不変（true のまま）。
+    for (const repeat of [1, 2, 3, 4, 5, 6]) {
+      expect(isMasterLevel({ ...base, repeat })).toBe(true);
+    }
+  });
+
+  it('B-08：サイズ/方向/回転速度のいずれか 1 条件でも欠けると非獲得（境界）', () => {
+    const base: LevelParams = {
+      repeat: 4,
+      seconds: 20,
+      direction: 'oscillate',
+      gridSize: 4,
+      rotationSpeed: 2.5,
+    };
     expect(isMasterLevel({ ...base, gridSize: 3 })).toBe(false);
     expect(isMasterLevel({ ...base, direction: 'one-way' })).toBe(false);
     expect(isMasterLevel({ ...base, rotationSpeed: 3 })).toBe(false);
@@ -194,7 +207,7 @@ describe('高レベル到達軸（B-09〜B-11、highestLevel 割合境界）', (
 describe('evaluateBadges（全 11 バッジ集約）', () => {
   it('未獲得から、条件を満たす複数バッジを同時に新規獲得する', () => {
     const master: LevelParams = {
-      count: 4,
+      repeat: 4,
       seconds: 20,
       direction: 'oscillate',
       gridSize: 4,

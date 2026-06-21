@@ -70,11 +70,18 @@ describe('LevelBadge (LB-1 / F-02)', () => {
   });
 });
 
-describe('CountBanner (CB-1 / F-02)', () => {
-  it('「◯個探せ！」を表示し SR ラベルを持つ（18pt 以上 26px）', () => {
+describe('CountBanner (CB-1 / F-02・v3.2 2 バリアント)', () => {
+  it('本番（既定 showCount=false）は「回転しているものを全て探せ」を表示し SR ラベルを持つ（18pt 以上 26px）', () => {
     const { getByTestId } = dark(<CountBanner count={3} testId="cb" />);
-    expect(getByTestId('cb-text').props.children).toBe('3 個探せ！');
+    // v3.2：本番は個数を出さず「回転しているものを全て探せ」（§4.9・AS-36）。
+    expect(getByTestId('cb-text').props.children).toBe('回転しているものを全て探せ');
     expect(flatStyle(getByTestId('cb-text')).fontSize).toBeGreaterThanOrEqual(24);
+    expect(screen.getByLabelText('回転しているパッチをすべて探してください')).toBeTruthy();
+  });
+
+  it('チュートリアル（showCount=true）は「回転しているものを◯つ探せ」を表示し個数 SR ラベルを持つ（§4.8）', () => {
+    const { getByTestId } = dark(<CountBanner count={3} showCount testId="cb" />);
+    expect(getByTestId('cb-text').props.children).toBe('回転しているものを3つ探せ');
     expect(screen.getByLabelText('3 個の回転を探してください')).toBeTruthy();
   });
 });
